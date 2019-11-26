@@ -1,0 +1,652 @@
+---
+title: "190819 - edgeR Huh7 CRISPRa R analysis notebook"
+output: html_notebook
+---
+
+####Install packages:
+```{r}
+#install.packages("calibrate")
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+#biocLite("biomaRt")
+```
+
+####Load packages:
+```{r}
+library(edgeR)
+library(biomaRt)
+library(calibrate)
+```
+
+```{r}
+sessionInfo()
+```
+
+####Load data:
+```{r}
+counts <- read.delim("~/Desktop/190425_EXP_18_CA6218_nsa_2novel.clean.readCount", row.names = 1)
+```
+
+####Select single sample (SS) data, i.e. all NT-Ctrl samples and all from one conditions
+```{r}
+cols_lncFARED1=c(7,8,13,10,18,20)
+lncFARED1_SS=counts[,cols_lncFARED1]
+
+cols_lncFARED2=c(7,9,13,11,18,21)
+lncFARED2_SS=counts[,cols_lncFARED2]
+
+cols_lncFARED3=c(3,1,18,17)
+lncFARED3_SS=counts[,cols_lncFARED3]
+
+cols_lncFARED4=c(3,4,13,15,18,16)
+lncFARED4_SS=counts[,cols_lncFARED4]
+
+cols_lncFARED5=c(3,2,7,6,13,12)
+lncFARED5_SS=counts[,cols_lncFARED5]
+
+cols_lncFARED6=c(7,5,13,14,18,19)
+lncFARED6_SS=counts[,cols_lncFARED6]
+```
+
+####Selection of all Huh7 samples
+```{r}
+cols_Huh7=c(1:21)
+Huh7_counts=counts[,cols_Huh7]
+```
+
+
+####Apply cutoff. Use at least 1 count in 3 or more samples:
+```{r}
+lncFARED1_counts_wco=lncFARED1_SS[(rowSums(lncFARED1_SS>0)>=3),]
+lncFARED2_counts_wco=lncFARED2_SS[(rowSums(lncFARED2_SS>0)>=3),]
+lncFARED3_counts_wco=lncFARED3_SS[(rowSums(lncFARED3_SS>0)>=2),]
+lncFARED4_counts_wco=lncFARED4_SS[(rowSums(lncFARED4_SS>0)>=3),]
+lncFARED5_counts_wco=lncFARED5_SS[(rowSums(lncFARED5_SS>0)>=3),]
+lncFARED6_counts_wco=lncFARED6_SS[(rowSums(lncFARED6_SS>0)>=3),]
+```
+
+#edgeR
+
+####DE analysis with the edgeR package (3 replicates)
+```{r}
+#First we put the data into a DGEList object:
+y_lncFARED1=DGEList(lncFARED1_counts_wco)
+y_lncFARED2=DGEList(lncFARED2_counts_wco)
+y_lncFARED4=DGEList(lncFARED4_counts_wco)
+y_lncFARED5=DGEList(lncFARED5_counts_wco)
+y_lncFARED6=DGEList(lncFARED6_counts_wco)
+
+#Then we conduct TMM normalization to account for compositional difference between the RNA-seq libraries:
+y_lncFARED1=calcNormFactors(y_lncFARED1)
+y_lncFARED2=calcNormFactors(y_lncFARED2)
+y_lncFARED4=calcNormFactors(y_lncFARED4)
+y_lncFARED5=calcNormFactors(y_lncFARED5)
+y_lncFARED6=calcNormFactors(y_lncFARED6)
+
+#The experimental design is defined:
+Experiment_SS = factor(c(rep(c(1,2,3), each=2)))
+treatment_SS = factor(c("NT","target","NT","target","NT","target"))
+design_SS = model.matrix(~Experiment_SS+treatment_SS)
+rownames(design_SS) = factor(c("NT","target","NT","target","NT","target"))
+design_SS
+
+#Common dispersions are estimated:
+y_lncFARED1 = estimateGLMCommonDisp(y_lncFARED1, design=design_SS, verbose=TRUE)
+y_lncFARED2 = estimateGLMCommonDisp(y_lncFARED2, design=design_SS, verbose=TRUE)
+y_lncFARED4 = estimateGLMCommonDisp(y_lncFARED4, design=design_SS, verbose=TRUE)
+y_lncFARED5 = estimateGLMCommonDisp(y_lncFARED5, design=design_SS, verbose=TRUE)
+y_lncFARED6 = estimateGLMCommonDisp(y_lncFARED6, design=design_SS, verbose=TRUE)
+
+#Generalized Linear Models are fitted:
+fit_lncFARED1 = glmFit(y_lncFARED1, design_SS)
+fit_lncFARED2 = glmFit(y_lncFARED2, design_SS)
+fit_lncFARED4 = glmFit(y_lncFARED4, design_SS)
+fit_lncFARED5 = glmFit(y_lncFARED5, design_SS)
+fit_lncFARED6 = glmFit(y_lncFARED6, design_SS)
+
+#Likelihood ratio tests are conducted:
+lrt_lncFARED1 <- glmLRT(fit_lncFARED1, coef=4)
+lrt_lncFARED2 <- glmLRT(fit_lncFARED2, coef=4)
+lrt_lncFARED4 <- glmLRT(fit_lncFARED4, coef=4)
+lrt_lncFARED5 <- glmLRT(fit_lncFARED5, coef=4)
+lrt_lncFARED6 <- glmLRT(fit_lncFARED6, coef=4)
+```
+
+####DE analysis with the edgeR package (2 replicates)
+```{r}
+y_lncFARED3=DGEList(lncFARED3_counts_wco)
+y_lncFARED3=calcNormFactors(y_lncFARED3)
+
+#special experimental design because only 2 replicates:
+Experiment_2rep = factor(c(rep(c(1,2), each=2)))
+treatment_2rep = factor(c("NT","target","NT","target"))
+design_2rep = model.matrix(~Experiment_2rep+treatment_2rep)
+rownames(design_2rep) = factor(c("NT","target","NT","target"))
+design_2rep
+
+y_lncFARED3 = estimateGLMCommonDisp(y_lncFARED3, design=design_2rep, verbose=TRUE)
+fit_lncFARED3 = glmFit(y_lncFARED3, design_2rep)
+lrt_lncFARED3 <- glmLRT(fit_lncFARED3, coef=3)
+```
+
+####Top DE genes are:
+```{r}
+topTags(lrt_lncFARED1)
+print(summary(decideTestsDGE(lrt_lncFARED1)))
+```
+
+```{r}
+topTags(lrt_lncFARED2)
+print(summary(decideTestsDGE(lrt_lncFARED2)))
+```
+
+```{r}
+topTags(lrt_lncFARED3)
+print(summary(decideTestsDGE(lrt_lncFARED3)))
+```
+```{r}
+topTags(lrt_lncFARED4)
+print(summary(decideTestsDGE(lrt_lncFARED4)))
+```
+```{r}
+topTags(lrt_lncFARED5)
+print(summary(decideTestsDGE(lrt_lncFARED5)))
+```
+```{r}
+topTags(lrt_lncFARED6)
+print(summary(decideTestsDGE(lrt_lncFARED6)))
+```
+
+####Add official gene symbols to lists and write the results of the DE analysis to a table:
+```{r}
+results_lncFARED1_SS <- topTags(lrt_lncFARED1,n = length(y_lncFARED1$counts[,1]))
+results_lncFARED2_SS <- topTags(lrt_lncFARED2,n = length(y_lncFARED2$counts[,1]))
+results_lncFARED3_SS <- topTags(lrt_lncFARED3,n = length(y_lncFARED3$counts[,1]))
+results_lncFARED4_SS <- topTags(lrt_lncFARED4,n = length(y_lncFARED4$counts[,1]))
+results_lncFARED5_SS <- topTags(lrt_lncFARED5,n = length(y_lncFARED5$counts[,1]))
+results_lncFARED6_SS <- topTags(lrt_lncFARED6,n = length(y_lncFARED6$counts[,1]))
+
+mart <- useMart("ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl",host="www.ensembl.org")
+ensembl2name <- getBM(attributes=c("ensembl_gene_id","external_gene_name"),mart=mart)
+
+results_lncFARED1_SS <- merge(x=results_lncFARED1_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_lncFARED2_SS <- merge(x=results_lncFARED2_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_lncFARED3_SS <- merge(x=results_lncFARED3_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_lncFARED4_SS <- merge(x=results_lncFARED4_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_lncFARED5_SS <- merge(x=results_lncFARED5_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_lncFARED6_SS <- merge(x=results_lncFARED6_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+
+write.table(as.matrix(results_lncFARED1_SS),file="~/Desktop/190426_lncFARED1_Huh7_DEG_w2Novel",sep="\t")
+write.table(as.matrix(results_lncFARED2_SS),file="~/Desktop/190426_lncFARED2_Huh7_DEG_w2Novel",sep="\t")
+write.table(as.matrix(results_lncFARED3_SS),file="~/Desktop/190426_lncFARED3_Huh7_DEG_w2Novel",sep="\t")
+write.table(as.matrix(results_lncFARED4_SS),file="~/Desktop/190426_lncFARED4_Huh7_DEG_w2Novel",sep="\t")
+write.table(as.matrix(results_lncFARED5_SS),file="~/Desktop/190426_lncFARED5_Huh7_DEG_w2Novel",sep="\t")
+write.table(as.matrix(results_lncFARED6_SS),file="~/Desktop/190426_lncFARED6_Huh7_DEG_w2Novel",sep="\t")
+```
+
+####Write the fitted (TMM) values to a table:
+```{r}
+fit_lncFARED1_name <- merge(x=fit_lncFARED1$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+write.table(as.matrix(fit_lncFARED1_name),file="~/Desktop/190426_lncFARED1_Huh7_TMM_w2Novel",sep="\t")
+
+fit_lncFARED2_name <- merge(x=fit_lncFARED2$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+write.table(as.matrix(fit_lncFARED2_name),file="~/Desktop/190426_lncFARED2_Huh7_TMM_w2Novel",sep="\t")
+
+fit_lncFARED3_name <- merge(x=fit_lncFARED3$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+write.table(as.matrix(fit_lncFARED3_name),file="~/Desktop/190426_lncFARED3_Huh7_TMM_w2Novel",sep="\t")
+
+fit_lncFARED4_name <- merge(x=fit_lncFARED4$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+write.table(as.matrix(fit_lncFARED4_name),file="~/Desktop/190426_lncFARED4_Huh7_TMM_w2Novel",sep="\t")
+
+fit_lncFARED5_name <- merge(x=fit_lncFARED5$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+write.table(as.matrix(fit_lncFARED5_name),file="~/Desktop/190426_lncFARED5_Huh7_TMM_w2Novel",sep="\t")
+
+fit_lncFARED6_name <- merge(x=fit_lncFARED6$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+write.table(as.matrix(fit_lncFARED6_name),file="~/Desktop/190426_lncFARED6_Huh7_TMM_w2Novel",sep="\t")
+```
+
+#PCA plots
+
+```{r}
+#In order to do PCA analysis on all samples together, we first normalize the samples similar to what was done for the DE analysis (TMM in edgeR) 
+Huh7_counts_wco=Huh7_counts[(rowSums(counts>0)>=3),]
+y=DGEList(Huh7_counts_wco)
+y <- calcNormFactors(y)
+Experiment <- factor(c("5","5","5","5","8","8","8","8","8","9","9","9","9","9","9","10","10","10","10","10","10"))
+Target <- factor(c("lncFARED3","lncFARED5","NT","lncFARED4","lncFARED6","lncFARED5","NT","lncFARED1","lncFARED2","lncFARED1","lncFARED2","lncFARED5","NT","lncFARED6","LINC001419","lncFARED4","lncFARED3","NT","lncFARED6","lncFARED1","lncFARED2"))
+design <- model.matrix(~Experiment+Target)
+rownames(design) <- colnames(y)
+y <- estimateGLMCommonDisp(y, design=design, verbose=TRUE)
+fit <- glmFit(y, design)
+```
+```{r}
+#Next we library normalize the TMM values:
+TMM=colSums(fit$fitted.values)
+
+TMM_LibrNorm = sweep(fit$fitted.values, 2, TMM, `/`)*10^6
+
+colSums(TMM_LibrNorm)
+```
+```{r}
+##PCA on normalized values
+par(pty="s") 
+PCA_norm<- prcomp(t(TMM_LibrNorm))
+Matrix_norm <- summary(PCA_norm)
+col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
+colors <- col.def
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 (", (Matrix$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", (Matrix$importance[2,4]*100),"%)"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,4],PCA_norm$x[,5],col=colors,pch=20,xlab=paste0("PC4 (", (Matrix$importance[2,4]*100), "%)"),ylab=paste0("PC5 (", (Matrix$importance[2,5]*100),"%)"),cex=2)
+text(PCA_norm$x[,4],PCA_norm$x[,5],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 (", (Matrix$importance[2,5]*100), "%)"),ylab=paste0("PC6 (", (Matrix$importance[2,6]*100),"%)"),cex=2)
+text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+```
+```{r}
+##PCA on normalized values
+par(pty="s") 
+PCA_norm<- prcomp(t(TMM_LibrNorm))
+Matrix_norm <- summary(PCA_norm)
+col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
+colors <- col.def
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 (", (Matrix$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", (Matrix$importance[2,4]*100),"%)"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,4],PCA_norm$x[,5],col=colors,pch=20,xlab=paste0("PC4 (", (Matrix$importance[2,4]*100), "%)"),ylab=paste0("PC5 (", (Matrix$importance[2,5]*100),"%)"),cex=2)
+text(PCA_norm$x[,4],PCA_norm$x[,5],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 (", (Matrix$importance[2,5]*100), "%)"),ylab=paste0("PC6 (", (Matrix$importance[2,6]*100),"%)"),cex=2)
+text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+```
+
+```{r}
+#library normalize raw counts
+colsum=colSums(Huh7_counts)
+
+Huh7_counts_LibrNorm = sweep(Huh7_counts, 2, colsum, `/`)*10^6
+
+```
+
+
+```{r}
+##PCA on Huh7normalized values
+Huh7_counts_LibrNorm_priorCount=Huh7_counts_LibrNorm+1
+
+par(pty="s") #make the plot square
+PCA_norm <- prcomp(t(Huh7_counts_LibrNorm_priorCount))
+Matrix <- summary(PCA_norm)
+col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(Huh7_counts), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(Huh7_counts), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(Huh7_counts),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 ", round(Matrix$importance[2,5]*100), "%"),ylab=paste0("PC6 ", round(Matrix$importance[2,6]*100),"%"),cex=2)
+text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(Huh7_counts),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,7],PCA_norm$x[,8],col=colors,pch=20,xlab=paste0("PC7 ", round(Matrix$importance[2,7]*100), "%"),ylab=paste0("PC8 ", round(Matrix$importance[2,8]*100),"%"),cex=2)
+text(PCA_norm$x[,7],PCA_norm$x[,8],labels=colnames(Huh7_counts),pos=list(1), cex=0.5)
+
+```
+
+
+```{r}
+#library normalize TMM for lncFARED1 dataset
+colsum=colSums(fit_lncFARED1$fitted.values)
+colsum=t(as.vector(colsum))
+
+lncFARED1_LibrNormTMM_counts = sweep(fit_lncFARED1$fitted.values, 2, colsum, `/`)*10^6
+
+colSums(lncFARED1_LibrNormTMM_counts)
+
+
+##PCA on normalized TMM-values for lncFARED1
+lncFARED1_LibrNormTMM_counts_priorCount=lncFARED1_LibrNormTMM_counts+1
+
+par(pty="s")
+PCA_norm<- prcomp(t(log2(lncFARED1_LibrNormTMM_counts_priorCount)))
+Matrix <- summary(PCA_norm)
+col.def<-c("darkblue","darkgreen", "darkblue","darkgreen", "darkblue","darkgreen")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=3, ylim=c(-40,40),xlim=c(-60,60))
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(fit_lncFARED1$fitted.values), pos=list(1), cex=0.6)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=3)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(fit_lncFARED1$fitted.values), pos=2, cex=0.6)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(fit_lncFARED1$fitted.values),pos=list(1), cex=0.5)
+
+```
+
+```{r}
+#library normalize TMM for lncFARED2 dataset
+colsum=colSums(fit_lncFARED2$fitted.values)
+colsum=t(as.vector(colsum))
+
+lncFARED2_LibrNormTMM_counts = sweep(fit_lncFARED2$fitted.values, 2, colsum, `/`)*10^6
+
+colSums(lncFARED2_LibrNormTMM_counts)
+
+
+##PCA on normalized TMM-values for lncFARED2
+lncFARED2_LibrNormTMM_counts_priorCount=lncFARED2_LibrNormTMM_counts+1
+
+par(pty="s") #make the plot square
+PCA_norm<- prcomp(t(log2(lncFARED2_LibrNormTMM_counts_priorCount)))
+Matrix <- summary(PCA_norm)
+col.def<-c("darkblue","darkgreen", "darkblue","darkgreen", "darkblue","darkgreen")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=3, ylim=c(-40,40),xlim=c(-60,60))
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(fit_lncFARED2$fitted.values), pos=list(1), cex=0.6)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=3)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(fit_lncFARED2$fitted.values), pos=2, cex=0.6)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(fit_lncFARED2$fitted.values),pos=list(1), cex=0.5)
+
+```
+
+```{r}
+#library normalize TMM for lncFARED3 dataset
+colsum=colSums(fit_lncFARED3$fitted.values)
+colsum=t(as.vector(colsum))
+
+lncFARED3_LibrNormTMM_counts = sweep(fit_lncFARED3$fitted.values, 2, colsum, `/`)*10^6
+
+colSums(lncFARED3_LibrNormTMM_counts)
+
+
+##PCA on normalized TMM-values for lncFARED3
+lncFARED3_LibrNormTMM_counts_priorCount=lncFARED3_LibrNormTMM_counts+1
+
+par(pty="s") #make the plot square
+PCA_norm<- prcomp(t(log2(lncFARED3_LibrNormTMM_counts_priorCount)))
+Matrix <- summary(PCA_norm)
+col.def<-c("darkblue","darkgreen", "darkblue","darkgreen", "darkblue","darkgreen")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=3, ylim=c(-40,40),xlim=c(-60,60))
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(fit_lncFARED3$fitted.values), pos=list(1), cex=0.6)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=3)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(fit_lncFARED3$fitted.values), pos=2, cex=0.6)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(fit_lncFARED3$fitted.values),pos=list(1), cex=0.5)
+
+```
+
+```{r}
+#library normalize TMM for lncFARED4 dataset
+colsum=colSums(fit_lncFARED4$fitted.values)
+colsum=t(as.vector(colsum))
+
+lncFARED4_LibrNormTMM_counts = sweep(fit_lncFARED4$fitted.values, 2, colsum, `/`)*10^6
+
+colSums(lncFARED4_LibrNormTMM_counts)
+
+
+##PCA on normalized TMM-values for lncFARED4
+lncFARED4_LibrNormTMM_counts_priorCount=lncFARED4_LibrNormTMM_counts+1
+
+par(pty="s") #make the plot square
+PCA_norm<- prcomp(t(log2(lncFARED4_LibrNormTMM_counts_priorCount)))
+Matrix <- summary(PCA_norm)
+col.def<-c("darkblue","darkgreen", "darkblue","darkgreen", "darkblue","darkgreen")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=3, ylim=c(-40,40),xlim=c(-60,60))
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(fit_lncFARED4$fitted.values), pos=list(1), cex=0.6)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=3)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(fit_lncFARED4$fitted.values), pos=2, cex=0.6)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(fit_lncFARED4$fitted.values),pos=list(1), cex=0.5)
+
+```
+
+```{r}
+#library normalize TMM for lncFARED5 dataset
+colsum=colSums(fit_lncFARED5$fitted.values)
+colsum=t(as.vector(colsum))
+
+lncFARED5_LibrNormTMM_counts = sweep(fit_lncFARED5$fitted.values, 2, colsum, `/`)*10^6
+
+colSums(lncFARED5_LibrNormTMM_counts)
+
+
+##PCA on normalized TMM-values for lncFARED5
+lncFARED5_LibrNormTMM_counts_priorCount=lncFARED5_LibrNormTMM_counts+1
+
+par(pty="s") #make the plot square
+PCA_norm<- prcomp(t(log2(lncFARED5_LibrNormTMM_counts_priorCount)))
+Matrix <- summary(PCA_norm)
+col.def<-c("darkblue","darkgreen", "darkblue","darkgreen", "darkblue","darkgreen")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=3, ylim=c(-40,40),xlim=c(-60,60))
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(fit_lncFARED5$fitted.values), pos=list(1), cex=0.6)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=3)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(fit_lncFARED5$fitted.values), pos=2, cex=0.6)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(fit_lncFARED5$fitted.values),pos=list(1), cex=0.5)
+
+```
+
+```{r}
+#library normalize TMM for lncFARED6 dataset
+colsum=colSums(fit_lncFARED6$fitted.values)
+colsum=t(as.vector(colsum))
+
+lncFARED6_LibrNormTMM_counts = sweep(fit_lncFARED6$fitted.values, 2, colsum, `/`)*10^6
+
+colSums(lncFARED6_LibrNormTMM_counts)
+
+
+##PCA on normalized TMM-values for lncFARED6
+lncFARED6_LibrNormTMM_counts_priorCount=lncFARED6_LibrNormTMM_counts+1
+
+par(pty="s") #make the plot square
+PCA_norm<- prcomp(t(log2(lncFARED6_LibrNormTMM_counts_priorCount)))
+Matrix <- summary(PCA_norm)
+col.def<-c("darkblue","darkgreen", "darkblue","darkgreen", "darkblue","darkgreen")
+colors <- col.def
+
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=3, ylim=c(-40,40),xlim=c(-60,60))
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(fit_lncFARED6$fitted.values), pos=list(1), cex=0.6)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=3)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(fit_lncFARED6$fitted.values), pos=2, cex=0.6)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(fit_lncFARED6$fitted.values),pos=list(1), cex=0.5)
+
+```
+
+#Volcano plots
+
+```{r}
+#volcano plot for lncFARED1 dataset
+par(pty="s")
+vp=results_lncFARED1_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED1'))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+```
+
+```{r}
+#Save a pdf of the volcano plot
+setwd("~/Desktop")
+pdf("190806_lncFARED1_volcano.pdf", height=2.5, width=2.5)
+par(pty="s") 
+par(mar=c(2,2,2,2))
+vp=results_lncFARED1_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED1', axes=FALSE))
+axis(side=2, at=c(0,150,300))
+axis(side=1, at=c(-5,0,5,10))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+print(vp, newpage = FALSE)
+dev.off()
+```
+
+
+```{r}
+#volcano plot for MSTRG.28468 dataset
+par(pty="s") 
+vp=results_lncFARED2_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED2'))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+```
+```{r}
+#Save a pdf of the volcano plot
+setwd("~/Desktop")
+pdf("190806_lncFARED2_volcano.pdf", height=2.5, width=2.5)
+par(pty="s") 
+par(mar=c(2,2,2,2))
+vp=results_lncFARED2_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'MSTRG.28468', axes=FALSE))
+axis(side=2, at=c(0,150,300))
+axis(side=1, at=c(-5,0,5,10))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+print(vp, newpage = FALSE)
+dev.off()
+```
+
+```{r}
+#volcano plot for lncFARED3 dataset
+par(pty="s") 
+vp=results_lncFARED3_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED3'))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+```
+
+```{r}
+#Save a pdf of the volcano plot
+setwd("~/Desktop")
+pdf("190806_lncFARED3_volcano_noHead.pdf", height=2.5, width=2.5)
+par(pty="s") 
+par(mar=c(2,2,2,2))
+vp=results_lncFARED3_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3, axes=FALSE))
+axis(side=2, at=c(0,60,120))
+axis(side=1, at=c(-5,0,5,10))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+print(vp, newpage = FALSE)
+dev.off()
+```
+
+```{r}
+#volcano plot for lncFARED4 dataset
+par(pty="s")
+vp=results_lncFARED4_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED4'))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+```
+
+```{r}
+#Save a pdf of the volcano plot
+setwd("~/Desktop")
+pdf("190806_lncFARED4_volcano.pdf", height=2.5, width=2.5)
+par(pty="s") 
+par(mar=c(2,2,2,2))
+vp=results_lncFARED4_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED4', axes=FALSE))
+axis(side=2, at=c(0,70,140))
+axis(side=1, at=c(-5,0,5,10))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+print(vp, newpage = FALSE)
+dev.off()
+```
+
+```{r}
+#volcano plot for lncFARED5 dataset
+par(pty="s") 
+vp=results_lncFARED5_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED5'))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+```
+
+```{r}
+#Save a pdf of the volcano plot
+setwd("~/Desktop")
+pdf("190806_lncFARED5_volcano.pdf", height=2.5, width=2.5)
+par(pty="s") 
+par(mar=c(2,2,2,2))
+vp=results_lncFARED5_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'MSTRG.12891', axes=FALSE))
+axis(side=2, at=c(0,150,300))
+axis(side=1, at=c(-5,0,5,10))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+print(vp, newpage = FALSE)
+dev.off()
+```
+
+
+```{r}
+#volcano plot for lncFARED6 dataset
+par(pty="s") 
+vp=results_lncFARED6_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED6'))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+```
+
+```{r}
+#Save a pdf of the volcano plot
+setwd("~/Desktop")
+pdf("190806_lncFARED6_volcano.pdf", height=2.5, width=2.5)
+par(pty="s") 
+par(mar=c(2,2,2,2))
+vp=results_lncFARED6_SS
+with(vp, plot(logFC, -log10(FDR), pch=20, cex=0.3,main = 'lncFARED6', axes=FALSE))
+axis(side=2, at=c(0,130,260))
+axis(side=1, at=c(-5,0,5,10))
+with(subset(vp, logFC>1 & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="red"))
+with(subset(vp, logFC<(-1) & FDR<0.05 & 2^(logCPM)>1), points(logFC, -log10(FDR), pch=20,cex=0.3, col="blue"))
+print(vp, newpage = FALSE)
+dev.off()
+```
