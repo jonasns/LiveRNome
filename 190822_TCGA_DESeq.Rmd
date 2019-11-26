@@ -1,0 +1,97 @@
+---
+title: "190820 - TCGA DESeq analysis"
+output: html_notebook
+---
+
+####Load packages:
+```{r}
+library(DESeq2)
+```
+
+####Load packages and settings for multi-core processing
+```{r}
+library(BiocParallel)
+register(MulticoreParam(4))
+```
+
+
+####Session Info:
+```{r}
+sessionInfo()
+```
+
+####Load data:
+```{r}
+TCGA <- read.delim("/Desktop/170418_TCGA_htseqcount_Chr1_22")
+cData_TCGA <- read.delim("/Desktop/cData_TCGA.txt")
+colnames(TCGA)=rownames(cData_TCGA)
+```
+
+####Apply cutoff. Use at least 1 count in 1 or more samples:
+```{r}
+TCGA_wco=TCGA[(rowSums(TCGA>0)>=1),]
+```
+
+####DE analysis with the DESeq2 package (samples are treated as paired)
+```{r}
+TCGA.deseq <- DESeqDataSetFromMatrix(countData = TCGA_wco, colData = cData_TCGA, design = ~ ID + Stage)
+TCGA.deseq <- DESeq(TCGA.deseq, betaPrior=TRUE, parallel=TRUE)
+```
+
+####Normalize counts by library size:
+```{r}
+TCGA.normalizedCounts <- t( t(counts(TCGA.deseq)) / sizeFactors(TCGA.deseq) )
+```
+
+####PCA on normalized counts
+```{r}
+TCGA.PCA<- prcomp(t(log2(TCGA.normalizedCounts+1)))
+col.def<-c("blue","red")
+colors <- rep(col.def, each=1)
+M_TCGA <- summary(TCGA.PCA)
+par(pty="s")
+plot(TCGA.PCA$x[,1],TCGA.PCA$x[,2],col=colors,pch=20, cex=2, xlab=paste0("PC1 (", round(M_TCGA$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(M_TCGA$importance[2,2]*100), "%)"))
+text(TCGA.PCA$x[,1],TCGA.PCA$x[,2],labels=cData_TCGA$Stage, cex=0.5)
+plot(TCGA.PCA$x[,3],TCGA.PCA$x[,4],col=colors,pch=20, cex=2, xlab=paste0("PC3 (", round(M_TCGA$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", round(M_TCGA$importance[2,4]*100), "%)"))
+text(TCGA.PCA$x[,3],TCGA.PCA$x[,4],labels=cData_TCGA$Stage, cex=0.5)
+```
+
+####Write the DE analysis results and normalized counts to a table:
+```{r}
+res.TCGA_wco <- results(TCGA.deseq, alpha=0.05, lfcThreshold=0, independentFiltering = TRUE, contrast = list("StagePrimary_Tumor","StageSolid_Tissue_Normal"))
+write.table(res.TCGA_wco, "~/Desktop/170418_deseq_TCGA_wco_LFC0", sep="\t")
+write.table(TCGA.normalizedCounts, "~/Desktop/170418_libr_size_norm_counts_TCGA", sep="\t")
+```
+
+####Volcano plot of DE analysis results
+```{r}
+par(pty="s")
+with(res.TCGA_wco, plot(log2FoldChange, -log10(padj), pch=20))
+with(subset(res.TCGA_wco, abs(log2FoldChange)>log2(2) & padj<0.05), points(log2FoldChange, -log10(padj), pch=20, col="red"))
+```
+
+####Volcano plot of DE analysis results with RBPs highlighted
+```{r}
+RBPs <- read.delim("~/Desktop/190823_170214_hRBP_final_list.txt")
+par(pty="s")
+with(res.TCGA_wco, plot(log2FoldChange, -log10(padj), pch=20))
+with(subset(res.TCGA_wco, abs(log2FoldChange)>log2(2) & padj<0.05 & row.names(res.TCGA_wco)%in%RBPs[,1]), points(log2FoldChange, -log10(padj), pch=20, col="red", cex=1))
+with(subset(res.TCGA_wco, abs(log2FoldChange)<log2(2) & padj>0.05 & row.names(res.TCGA_wco)%in%RBPs[,1]), points(log2FoldChange, -log10(padj), pch=20, col="blue", cex=1))
+```
+
+####Hierarchical clustering of normalized counts
+```{r}
+TCGA.normalizedCounts_new_head=TCGA.normalizedCounts
+colnames(TCGA.normalizedCounts_new_head)=paste0(cData_TCGA$Stage, cData_TCGA$ID)
+sampleTree_TCGA_new_head <- hclust(dist(t(TCGA.normalizedCounts_new_head)), method = "average")
+colLab <- function(n) { 
+if (is.leaf(n)) {
+a <- attributes(n)
+labCol <- ifelse(grepl("Primary_Tumor",a$label),"blue","red")
+attr(n, "nodePar") <- c(a$nodePar, lab.col = labCol)
+}
+n
+}
+par(mar=c(15,3,2,2))
+plot(dendrapply(as.dendrogram(sampleTree_TCGA_new_head),colLab))
+```
