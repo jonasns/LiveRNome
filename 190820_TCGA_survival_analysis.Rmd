@@ -1,0 +1,299 @@
+---
+title: "190820 - TCGA survival analysis top 10 RBPs"
+output: html_notebook
+---
+
+####Install packages:
+```{r}
+#install.packages("dplyr")
+#install.packages("survminer")
+```
+
+####Load packages:
+```{r}
+library(survminer)
+library(dplyr)
+```
+
+####Session Info
+```{r}
+sessionInfo()
+```
+
+####Load data:
+```{r}
+#Data has been pre-ordered into tertiles based on RNA-seq determined expression of the RBP in question
+#Tumor stage has been ordered into simple stage, by e.g. taking iiia, iiib, and iiic pooled into iii 
+TCGAsurv <- read.delim("~/Desktop/190701_TCGAsurv_allRBPs.txt", row.names = 1)
+glimpse(TCGAsurv)
+```
+```{r}
+#Setting reference group for Hazard Ratio computed using coxph function in R
+TCGAsurv$tumor_stage_simple <- factor(TCGAsurv$tumor_stage_simple, levels = c("stage i","stage ii","stage iii","stage iv", "not reported"))
+
+TCGAsurv$RBP1 <- factor(TCGAsurv$RBP1, levels = c("lo","mid","hi"))
+TCGAsurv$RBP2 <- factor(TCGAsurv$RBP2, levels = c("lo","mid","hi"))
+TCGAsurv$RBP3 <- factor(TCGAsurv$RBP3, levels = c("lo","mid","hi"))
+TCGAsurv$RBP4 <- factor(TCGAsurv$RBP4, levels = c("lo","mid","hi"))
+TCGAsurv$RBP5 <- factor(TCGAsurv$RBP5, levels = c("lo","mid","hi"))
+TCGAsurv$RBP6 <- factor(TCGAsurv$RBP6, levels = c("lo","mid","hi"))
+TCGAsurv$RBP7 <- factor(TCGAsurv$RBP7, levels = c("lo","mid","hi"))
+TCGAsurv$RBP8 <- factor(TCGAsurv$RBP8, levels = c("lo","mid","hi"))
+TCGAsurv$RBP9 <- factor(TCGAsurv$RBP9, levels = c("lo","mid","hi"))
+TCGAsurv$RBP10 <- factor(TCGAsurv$RBP10, levels = c("lo","mid","hi"))
+```
+
+####Base survival analysis of the TCGA-LIHC dataset
+```{r}
+#survival graph based on tumor stage
+TCGA_surv_object <- Surv(time = TCGAsurv$time, event = TCGAsurv$censored)
+fitTCGA1 <- survfit(TCGA_surv_object ~ tumor_stage_simple, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#barplots of tumor stage
+par(mar=c(6,3,1,1))
+barplot(table(TCGAsurv$tumor_stage_simple), las =2)
+```
+
+```{r}
+#forest plot of tumor stage
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ tumor_stage_simple, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+
+```{r}
+#Age distribution in the TCGA-LIHC cohort
+hist(TCGAsurv$age_at_diagnosis/365)
+```
+
+
+```{r}
+#binning of age groups
+x <- cut(TCGAsurv$age_at_diagnosis/365, breaks=c(0,40,60,75,110), labels=c("0-40","40-60","60-75","75+"))
+TCGAsurv$age_at_diagnosis = x
+```
+```{r}
+#survival graph based on age
+fitTCGA1 <- survfit(TCGA_surv_object ~ age_at_diagnosis, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+
+```{r}
+#forest plot of age
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ age_at_diagnosis, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on gender
+fitTCGA1 <- survfit(TCGA_surv_object ~ gender, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#barplots of age
+par(mar=c(6,3,1,1))
+barplot(table(TCGAsurv$gender), las =2)
+```
+
+```{r}
+#forest plot of gender
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+####Suvival analysis of top10 RBPs from the TCGA-LIHC
+```{r}
+#forest plot of RBPs and metadata
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ tumor_stage_simple + age_at_diagnosis + gender + RBP2 + RBP5 + RBP3 + RBP6 + RBP4 + RBP1 + RBP9 + RBP10 + RBP8 + RBP7, 
+                   data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBPs without metadata
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP2 + RBP5 + RBP3 + RBP6 + RBP4 + RBP1 + RBP9 + RBP10 + RBP8 + RBP7, 
+                   data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP1 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP1, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP1 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP1, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP1 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP1 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP2 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP2, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP2 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP2, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP2 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP2 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP3 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP3, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP3 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP3, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+```{r}
+#forest plot of RBP3 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP3 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP4 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP4, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP4 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP4, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP4 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP4 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP5 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP5, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP5 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP5, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP5 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP5 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP6 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP6, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP6 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP6, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP6 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP6 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP7 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP7, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+```{r}
+#forest plot of RBP7 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP7, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP7 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP7 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP8 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP8, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP8 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP8, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP8 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP8 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP9 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP9, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+```{r}
+#forest plot of RBP9 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP9, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP9 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP9 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#survival graph based on RBP10 expression (tertiles)
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP10, data = TCGAsurv)
+ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+```
+
+```{r}
+#forest plot of RBP10 expression (tertiles)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP10, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
+
+```{r}
+#forest plot of RBP10 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP10 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
+ggforest(TCGA.fit.coxph, data = TCGAsurv)
+```
