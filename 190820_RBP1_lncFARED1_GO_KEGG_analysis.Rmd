@@ -1,0 +1,264 @@
+---
+title: "190828 RBP1-lncFARED1 GO analysis"
+output: html_notebook
+---
+
+####Install packages:
+```{r}
+#Install packages:
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("clusterProfiler")
+#biocLite("Rgraphviz")
+#biocLite("DOSE")
+```
+
+####Load packages:
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(DOSE)
+```
+
+```{r}
+sessionInfo()
+```
+
+####Load the data:
+```{r}
+#Note: It's better to use ENSEMBL or ENTREZ IDs for the GO analysis. The clusterProfiler package only accepts ENTREZ IDs for KEGG pathway analysis.
+RBP1 =  read.delim("~/Desktop/190416_RBP1_FDR005_ALL_up_down_ensembl.txt", header=F)
+lncFARED1 =  read.delim("~/Desktop/190416_lncFARED1_FDR005_ALL_up_down_ensembl.txt", header=F)
+RBP1_lncFARED1_OVERLAP = read.delim("~/Desktop/190417_RBP1_lncFARED1_FDR005_ALL_up_down_OVERLAP.txt", header=F)
+```
+
+#### Biological Process GO analysis
+```{r}
+RBP1_BP <- enrichGO(gene = RBP1$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(RBP1_BP))
+
+lncFARED1_BP <- enrichGO(gene = lncFARED1$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(lncFARED1_BP))
+
+RBP1_lncFARED1_OVERLAP_BP <- enrichGO(gene = RBP1_lncFARED1_OVERLAP$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(RBP1_lncFARED1_OVERLAP_BP))
+```
+
+```{r}
+#Plot top 15 BPs as dotplots
+dotplot(RBP1_BP, showCategory=15)
+dotplot(lncFARED1_BP, showCategory=15)
+dotplot(RBP1_lncFARED1_OVERLAP_BP, showCategory=15)
+```
+
+```{r}
+#Plot top 10 BPs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_BP, 10)
+cnetplot(lncFARED1_BP, 10)
+cnetplot(RBP1_lncFARED1_OVERLAP_BP, 10)
+```
+
+```{r}
+#write the analysis results to file:
+write.table(as.matrix(summary(RBP1_BP)),file="~/Desktop/190828_Summary_RBP1_BP.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_BP)),file="~/Desktop/190828_Summary_lncFARED1_BP.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_BP)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_BP.txt",sep="\t")
+```
+#### Molecular Functions GO analysis
+```{r}
+RBP1_MF <- enrichGO(gene = RBP1$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "MF",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(RBP1_MF))
+
+lncFARED1_MF <- enrichGO(gene = lncFARED1$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "MF",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(lncFARED1_MF))
+
+#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
+RBP1_lncFARED1_OVERLAP_MF <- enrichGO(gene = RBP1_lncFARED1_OVERLAP$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "MF",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.25,
+                qvalueCutoff  = 0.25,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(RBP1_lncFARED1_OVERLAP_MF))
+
+```
+```{r}
+#Plot top 15 MFs as dotplots
+dotplot(RBP1_MF, showCategory=15)
+dotplot(lncFARED1_MF, showCategory=15)
+dotplot(RBP1_lncFARED1_OVERLAP_MF, showCategory=15)
+```
+
+```{r}
+#Plot top 10 MFs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_MF, 10)
+cnetplot(lncFARED1_MF, 10)
+cnetplot(RBP1_lncFARED1_OVERLAP_MF, 10)
+```
+
+```{r}
+#write the analysis results to file:
+write.table(as.matrix(summary(RBP1_MF)),file="~/Desktop/190828_Summary_RBP1_MF.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_MF)),file="~/Desktop/190828_Summary_lncFARED1_MF.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_MF)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_MF.txt",sep="\t")
+```
+
+#### Cellular component GO analysis
+```{r}
+RBP1_CC <- enrichGO(gene = RBP1$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "CC",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(RBP1_CC))
+
+lncFARED1_CC <- enrichGO(gene = lncFARED1$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "CC",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(lncFARED1_CC))
+
+#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
+RBP1_lncFARED1_OVERLAP_CC <- enrichGO(gene = RBP1_lncFARED1_OVERLAP$V1,
+                keyType       = 'ENSEMBL',
+                OrgDb         = org.Hs.eg.db,
+                ont           = "CC",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.25,
+                qvalueCutoff  = 0.25,
+                minGSSize     = 5,
+                readable      = TRUE)
+head(summary(RBP1_lncFARED1_OVERLAP_CC))
+
+```
+
+```{r}
+#Plot top 15 CCs as dotplots
+dotplot(RBP1_CC, showCategory=15)
+dotplot(lncFARED1_CC, showCategory=15)
+dotplot(RBP1_lncFARED1_OVERLAP_CC, showCategory=15)
+```
+
+```{r}
+#Plot top 10 CCs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_CC, 10)
+cnetplot(lncFARED1_CC, 10)
+cnetplot(RBP1_lncFARED1_OVERLAP_CC, 10)
+```
+
+```{r}
+#write the analysis results to file:
+write.table(as.matrix(summary(RBP1_CC)),file="~/Desktop/190828_Summary_RBP1_CC.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_CC)),file="~/Desktop/190828_Summary_lncFARED1_CC.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_CC)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_CC.txt",sep="\t")
+```
+
+#### KEGG analysis
+```{r}
+#First change the gene IDs from ENSEMBL to ENTREZ:
+RBP1.entrez <- bitr(RBP1$V1, fromType = "ENSEMBL",
+        toType = c("ENTREZID"),
+        OrgDb = org.Hs.eg.db)
+
+lncFARED1.entrez <- bitr(lncFARED1$V1, fromType = "ENSEMBL",
+        toType = c("ENTREZID"),
+        OrgDb = org.Hs.eg.db)
+
+RBP1.lncFARED1.OVERLAP.entrez <- bitr(RBP1_lncFARED1_OVERLAP$V1, fromType = "ENSEMBL",
+        toType = c("ENTREZID"),
+        OrgDb = org.Hs.eg.db)
+```
+
+```{r}
+#Then perform the KEGG analysis
+
+#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
+RBP1_kegg <- enrichKEGG(gene = RBP1.entrez$ENTREZID,
+                 organism     = 'hsa',
+                 pvalueCutoff = 0.50)
+head(RBP1_kegg)
+
+lncFARED1_kegg <- enrichKEGG(gene = lncFARED1.entrez$ENTREZID,
+                 organism     = 'hsa',
+                 pvalueCutoff = 0.05)
+head(lncFARED1_kegg)
+
+#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
+RBP1_lncFARED1_OVERLAP_kegg <- enrichKEGG(gene = RBP1.lncFARED1.OVERLAP.entrez$ENTREZID,
+                 organism     = 'hsa',
+                 pvalueCutoff = 0.25)
+head(RBP1_lncFARED1_OVERLAP_kegg)
+```
+
+
+```{r}
+#Plot top 15 KEGGs as dotplots
+dotplot(RBP1_kegg, showCategory=15)
+dotplot(lncFARED1_kegg, showCategory=15)
+dotplot(RBP1_lncFARED1_OVERLAP_kegg, showCategory=15)
+```
+
+```{r}
+#Plot top 10 KEGGs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+#cnetplot(RBP1_kegg, 10)
+cnetplot(lncFARED1_kegg, 10)
+cnetplot(RBP1_lncFARED1_OVERLAP_kegg, 10)
+```
+
+```{r}
+#write the analysis results to file:
+write.table(as.matrix(summary(RBP1_kegg)),file="~/Desktop/190828_Summary_RBP1_KEGG.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_kegg)),file="~/Desktop/190828_Summary_lncFARED1_KEGG.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_kegg)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_KEGG.txt",sep="\t")
+```
