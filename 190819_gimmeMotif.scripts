@@ -1,0 +1,18 @@
+#GimmeMotifs v0.13.1
+
+#installation and activation
+conda create -n gimme python=3 gimmemotifs
+source activate gimme
+
+#Find differential motifs (gimme maelstrom)
+gimme maelstrom 190321_maelstrom_selectRBP_prom400_logFC.txt hg38 190321_maelstrom_selectRBP_prom400_logFC.out
+
+#Motif enrichment statistics (gimme roc)
+#Generate background (To get random genomic sequences with a matched GC% content):
+gimme background 190321_random.gc_lncFARED1_prom400_up.bed.fa gc -g hg38 -n 1000 -l 400 -i 190314_lncFARED1_prom400_up.bed.fa
+
+#run gimme roc
+gimme roc 190219_lncFARED1_prom_all.fa 190220_random.gc.allLncs.fa -r 190220_lncFARED1_prom_all.roc
+
+#Scan for known motif locations (gimme scan)
+gimme scan 190219_lncFARED1_prom_all.bed -g hg38 -t -f 0.05 > table.count.FPR005.txt 
