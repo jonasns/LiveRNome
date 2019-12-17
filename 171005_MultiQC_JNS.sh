@@ -7,7 +7,7 @@
 #SBATCH -A uppmax_proj_number 
 #SBATCH -p core
 #SBATCH -n 2
-#SBATCH -t 4:00:00
+#SBATCH -t 1:00:00
 
 #load packages. bioinfo-tools is loaded on uppmax in order to load all other packages used.
 module load bioinfo-tools
