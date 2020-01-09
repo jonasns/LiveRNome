@@ -231,7 +231,7 @@ colSums(TMM_LibrNorm)
 ##PCA on normalized values
 par(pty="s") 
 PCA_norm<- prcomp(t(TMM_LibrNorm))
-Matrix_norm <- summary(PCA_norm)
+Matrix <- summary(PCA_norm)
 col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
 colors <- col.def
 
@@ -254,7 +254,7 @@ text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), ce
 ##PCA on normalized values
 par(pty="s") 
 PCA_norm<- prcomp(t(TMM_LibrNorm))
-Matrix_norm <- summary(PCA_norm)
+Matrix <- summary(PCA_norm)
 col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
 colors <- col.def
 
