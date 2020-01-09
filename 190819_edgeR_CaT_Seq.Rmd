@@ -227,10 +227,11 @@ TMM_LibrNorm = sweep(fit$fitted.values, 2, TMM, `/`)*10^6
 
 colSums(TMM_LibrNorm)
 ```
+
 ```{r}
 ##PCA on normalized values
 par(pty="s") 
-PCA_norm<- prcomp(t(TMM_LibrNorm))
+PCA_norm<- prcomp(t(log2(TMM_LibrNorm+1))
 Matrix <- summary(PCA_norm)
 col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
 colors <- col.def
@@ -250,67 +251,6 @@ text(PCA_norm$x[,4],PCA_norm$x[,5],labels=colnames(TMM_LibrNorm),pos=list(1), ce
 plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 (", (Matrix$importance[2,5]*100), "%)"),ylab=paste0("PC6 (", (Matrix$importance[2,6]*100),"%)"),cex=2)
 text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
 ```
-```{r}
-##PCA on normalized values
-par(pty="s") 
-PCA_norm<- prcomp(t(TMM_LibrNorm))
-Matrix <- summary(PCA_norm)
-col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
-colors <- col.def
-
-plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
-text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
-
-plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
-text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
-
-plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 (", (Matrix$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", (Matrix$importance[2,4]*100),"%)"),cex=2)
-text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
-
-plot(PCA_norm$x[,4],PCA_norm$x[,5],col=colors,pch=20,xlab=paste0("PC4 (", (Matrix$importance[2,4]*100), "%)"),ylab=paste0("PC5 (", (Matrix$importance[2,5]*100),"%)"),cex=2)
-text(PCA_norm$x[,4],PCA_norm$x[,5],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
-
-plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 (", (Matrix$importance[2,5]*100), "%)"),ylab=paste0("PC6 (", (Matrix$importance[2,6]*100),"%)"),cex=2)
-text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
-```
-
-```{r}
-#library normalize raw counts
-colsum=colSums(Huh7_counts)
-
-Huh7_counts_LibrNorm = sweep(Huh7_counts, 2, colsum, `/`)*10^6
-
-```
-
-
-```{r}
-##PCA on Huh7normalized values
-Huh7_counts_LibrNorm_priorCount=Huh7_counts_LibrNorm+1
-
-par(pty="s") #make the plot square
-PCA_norm <- prcomp(t(Huh7_counts_LibrNorm_priorCount))
-Matrix <- summary(PCA_norm)
-col.def<-c("yellow"	,"black"	,"red"	,"grey",	"green",	"black",	"red",	"purple",	"brown",	"purple",	"brown",	"black",	"red",	"green",	"grey",	"grey",	"yellow",	"red",	"green",	"purple",	"brown")
-colors <- col.def
-
-
-plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
-text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(Huh7_counts), pos=2, cex=0.5)
-
-plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
-text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(Huh7_counts), pos=2, cex=0.5)
-
-plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 ", round(Matrix$importance[2,3]*100), "%"),ylab=paste0("PC4 ", round(Matrix$importance[2,4]*100),"%"),cex=2)
-text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(Huh7_counts),pos=list(1), cex=0.5)
-
-plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 ", round(Matrix$importance[2,5]*100), "%"),ylab=paste0("PC6 ", round(Matrix$importance[2,6]*100),"%"),cex=2)
-text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(Huh7_counts),pos=list(1), cex=0.5)
-
-plot(PCA_norm$x[,7],PCA_norm$x[,8],col=colors,pch=20,xlab=paste0("PC7 ", round(Matrix$importance[2,7]*100), "%"),ylab=paste0("PC8 ", round(Matrix$importance[2,8]*100),"%"),cex=2)
-text(PCA_norm$x[,7],PCA_norm$x[,8],labels=colnames(Huh7_counts),pos=list(1), cex=0.5)
-
-```
-
 
 ```{r}
 #library normalize TMM for lncFARED1 dataset
