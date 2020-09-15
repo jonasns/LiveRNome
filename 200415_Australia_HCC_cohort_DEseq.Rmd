@@ -132,4 +132,5 @@ dev.off()
 ####Session Info:
 ```{r}
 sessionInfo()
+#DEseq2 version used for final DEG result list: 1.14.1 (in bioconductor v. 3.4). 
 ```
