@@ -1,0 +1,425 @@
+---
+title: "190313 - edgeR RBP-KD RNAseq data analysis"
+output: html_notebook
+---
+
+####Install packages:
+```{r}
+#install.packages("calibrate")
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+#biocLite("biomaRt")
+```
+
+####Load packages:
+```{r, message=FALSE}
+library(edgeR)
+library(biomaRt)
+library(calibrate)
+library(ggplot2)
+library(ggfortify)
+library(ggrepel)
+library(cowplot)
+```
+
+```{r}
+sessionInfo()
+```
+R version 3.4.3 (2017-11-30)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS High Sierra 10.13.6
+
+Matrix products: default
+BLAS: /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.4/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] parallel  stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] calibrate_1.7.2            MASS_7.3-48                biomaRt_2.34.2             piano_1.18.1               ggfortify_0.4.1            ggplot2_2.2.1              DESeq2_1.18.1             
+ [8] SummarizedExperiment_1.8.1 DelayedArray_0.4.1         matrixStats_0.53.0         Biobase_2.38.0             GenomicRanges_1.30.1       GenomeInfoDb_1.14.0        IRanges_2.12.0            
+[15] S4Vectors_0.16.0           BiocGenerics_0.24.0        edgeR_3.20.7               limma_3.34.6              
+
+loaded via a namespace (and not attached):
+ [1] bitops_1.0-6           bit64_0.9-7            httr_1.3.1             RColorBrewer_1.1-2     progress_1.1.2         rprojroot_1.3-2        tools_3.4.3            backports_1.1.2        R6_2.2.2              
+[10] rpart_4.1-12           KernSmooth_2.23-15     Hmisc_4.1-1            DBI_0.7                lazyeval_0.2.1         colorspace_1.3-2       nnet_7.3-12            prettyunits_1.0.2      gridExtra_2.3         
+[19] curl_3.1               bit_1.1-12             compiler_3.4.3         htmlTable_1.11.2       slam_0.1-42            caTools_1.17.1         scales_0.5.0           checkmate_1.8.5        relations_0.6-7       
+[28] genefilter_1.60.0      stringr_1.2.0          digest_0.6.15          foreign_0.8-69         rmarkdown_1.8          XVector_0.18.0         base64enc_0.1-3        pkgconfig_2.0.1        htmltools_0.3.6       
+[37] htmlwidgets_1.0        rlang_0.1.6            rstudioapi_0.7         RSQLite_2.0            bindr_0.1              BiocParallel_1.12.0    gtools_3.5.0           acepack_1.4.1          dplyr_0.7.4           
+[46] RCurl_1.95-4.10        magrittr_1.5           GenomeInfoDbData_1.0.0 Formula_1.2-2          Matrix_1.2-12          Rcpp_0.12.15           munsell_0.4.3          stringi_1.1.6          yaml_2.1.16           
+[55] zlibbioc_1.24.0        gplots_3.0.1           plyr_1.8.4             grid_3.4.3             blob_1.1.0             gdata_2.18.0           lattice_0.20-35        splines_3.4.3          annotate_1.56.1       
+[64] locfit_1.5-9.1         knitr_1.19             pillar_1.1.0           fgsea_1.4.1            igraph_1.1.2           geneplotter_1.56.0     marray_1.56.0          fastmatch_1.1-0        XML_3.98-1.9          
+[73] glue_1.2.0             evaluate_0.10.1        latticeExtra_0.6-28    data.table_1.10.4-3    gtable_0.2.0           purrr_0.2.4            tidyr_0.7.2            assertthat_0.2.0       xtable_1.8-2          
+[82] survival_2.41-3        tibble_1.4.2           AnnotationDbi_1.40.0   memoise_1.1.0          sets_1.0-18            bindrcpp_0.2           cluster_2.0.6            
+
+```{r}
+#Install packages:
+#install.packages("ggfortify")
+#install.packages("calibrate")
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+#biocLite("piano")
+#biocLite("biomaRt")
+```
+
+####Load data:
+```{r}
+counts <- read.delim("~/Desktop/171130_EXP_17_CA6211_nsa.clean.readCount", row.names = 1)
+```
+
+####Select single sample (SS) data, i.e. all NT-Ctrl samples and all from one conditions
+```{r}
+cols_RBP10=c(6,7,17,18,25,29,36,39)
+cols_RBP9=c(6,9,17,20,25,31,36,40)
+cols_RBP8=c(6,4,17,15,25,26,36,38)
+cols_RBP7=c(6,1,17,12,25,23,36,42)
+cols_RBP6=c(6,5,17,16,25,27,36,34)
+cols_RBP5=c(6,3,17,14,25,28,36,44)
+cols_RBP4=c(6,11,17,22,25,33,36,37)
+cols_RBP3=c(6,2,17,13,25,24,36,43)
+cols_RBP2=c(6,10,17,21,25,32,36,41)
+cols_RBP1=c(6,8,17,19,25,30,36,35)
+
+RBP10_SS=counts[,cols_RBP10]
+RBP9_SS=counts[,cols_RBP9]
+RBP8_SS=counts[,cols_RBP8]
+RBP7_SS=counts[,cols_RBP7]
+RBP6_SS=counts[,cols_RBP6]
+RBP5_SS=counts[,cols_RBP5]
+RBP4_SS=counts[,cols_RBP4]
+RBP3_SS=counts[,cols_RBP3]
+RBP2_SS=counts[,cols_RBP2]
+RBP1_SS=counts[,cols_RBP1]
+```
+
+####Apply cutoff. Use at least 1 count in 3 or more samples:
+```{r}
+RBP10_counts_wco=RBP10_SS[(rowSums(RBP10_SS>0)>=3),]
+RBP9_counts_wco=RBP9_SS[(rowSums(RBP9_SS>0)>=3),]
+RBP8_counts_wco=RBP8_SS[(rowSums(RBP8_SS>0)>=3),]
+RBP7_counts_wco=RBP7_SS[(rowSums(RBP7_SS>0)>=3),]
+RBP6_counts_wco=RBP6_SS[(rowSums(RBP6_SS>0)>=3),]
+RBP5_counts_wco=RBP5_SS[(rowSums(RBP5_SS>0)>=3),]
+RBP4_counts_wco=RBP4_SS[(rowSums(RBP4_SS>0)>=3),]
+RBP3_counts_wco=RBP3_SS[(rowSums(RBP3_SS>0)>=3),]
+RBP2_counts_wco=RBP2_SS[(rowSums(RBP2_SS>0)>=3),]
+RBP1_counts_wco=RBP1_SS[(rowSums(RBP1_SS>0)>=3),]
+
+```
+
+#edgeR
+####DE analysis with the edgeR package
+```{r}
+#First we put the data into a DGEList object:
+y_RBP10=DGEList(RBP10_counts_wco)
+y_RBP9=DGEList(RBP9_counts_wco)
+y_RBP8=DGEList(RBP8_counts_wco)
+y_RBP7=DGEList(RBP7_counts_wco)
+y_RBP6=DGEList(RBP6_counts_wco)
+y_RBP5=DGEList(RBP5_counts_wco)
+y_RBP4=DGEList(RBP4_counts_wco)
+y_RBP3=DGEList(RBP3_counts_wco)
+y_RBP2=DGEList(RBP2_counts_wco)
+y_RBP1=DGEList(RBP1_counts_wco)
+
+#Then we conduct TMM normalization to account for compositional difference between the RNA-seq libraries:
+y_RBP10=calcNormFactors(y_RBP10)
+y_RBP9=calcNormFactors(y_RBP9)
+y_RBP8=calcNormFactors(y_RBP8)
+y_RBP7=calcNormFactors(y_RBP7)
+y_RBP6=calcNormFactors(y_RBP6)
+y_RBP5=calcNormFactors(y_RBP5)
+y_RBP4=calcNormFactors(y_RBP4)
+y_RBP3=calcNormFactors(y_RBP3)
+y_RBP2=calcNormFactors(y_RBP2)
+y_RBP1=calcNormFactors(y_RBP1)
+
+#The experimental design is defined:
+Experiment_SS = factor(c(rep(c(1,2,3,4), each=2)))
+siRNA_SS = factor(c("NT","target","NT","target","NT","target","NT","target"))
+design_SS = model.matrix(~Experiment_SS+siRNA_SS)
+rownames(design_SS) = factor(c("NT","target","NT","target","NT","target","NT","target"))
+design_SS
+
+#Common dispersions are estimated:
+y_RBP10 = estimateGLMCommonDisp(y_RBP10, design=design_SS, verbose=TRUE)
+y_RBP9 = estimateGLMCommonDisp(y_RBP9, design=design_SS, verbose=TRUE)
+y_RBP8 = estimateGLMCommonDisp(y_RBP8, design=design_SS, verbose=TRUE)
+y_RBP7 = estimateGLMCommonDisp(y_RBP7, design=design_SS, verbose=TRUE)
+y_RBP6 = estimateGLMCommonDisp(y_RBP6, design=design_SS, verbose=TRUE)
+y_RBP5 = estimateGLMCommonDisp(y_RBP5, design=design_SS, verbose=TRUE)
+y_RBP4 = estimateGLMCommonDisp(y_RBP4, design=design_SS, verbose=TRUE)
+y_RBP3 = estimateGLMCommonDisp(y_RBP3, design=design_SS, verbose=TRUE)
+y_RBP2 = estimateGLMCommonDisp(y_RBP2, design=design_SS, verbose=TRUE)
+y_RBP1 = estimateGLMCommonDisp(y_RBP1, design=design_SS, verbose=TRUE)
+
+#Generalized Linear Models are fitted:
+fit_RBP10 = glmFit(y_RBP10, design_SS)
+fit_RBP9 = glmFit(y_RBP9, design_SS)
+fit_RBP8 = glmFit(y_RBP8, design_SS)
+fit_RBP7 = glmFit(y_RBP7, design_SS)
+fit_RBP6 = glmFit(y_RBP6, design_SS)
+fit_RBP5 = glmFit(y_RBP5, design_SS)
+fit_RBP4 = glmFit(y_RBP4, design_SS)
+fit_RBP3 = glmFit(y_RBP3, design_SS)
+fit_RBP2 = glmFit(y_RBP2, design_SS)
+fit_RBP1 = glmFit(y_RBP1, design_SS)
+
+#Likelihood ratio tests are conducted:
+lrt_RBP10_SS <- glmLRT(fit_RBP10, coef=5)
+lrt_RBP9_SS <- glmLRT(fit_RBP9, coef=5)
+lrt_RBP8_SS <- glmLRT(fit_RBP8, coef=5)
+lrt_RBP7_SS <- glmLRT(fit_RBP7, coef=5)
+lrt_RBP6_SS <- glmLRT(fit_RBP6, coef=5)
+lrt_RBP5_SS <- glmLRT(fit_RBP5, coef=5)
+lrt_RBP4_SS <- glmLRT(fit_RBP4, coef=5)
+lrt_RBP3_SS <- glmLRT(fit_RBP3, coef=5)
+lrt_RBP2_SS <- glmLRT(fit_RBP2, coef=5)
+lrt_RBP1_SS <- glmLRT(fit_RBP1, coef=5)
+```
+
+####Total number of DE genes are:
+```{r}
+lrtSS.list=list(lrt_RBP10_SS,lrt_RBP9_SS,lrt_RBP8_SS,lrt_RBP7_SS,lrt_RBP6_SS,lrt_RBP5_SS,lrt_RBP4_SS,lrt_RBP3_SS,lrt_RBP2_SS,lrt_RBP1_SS)
+
+for(i in 1:length(lrtSS.list)) {
+  topTags(lrtSS.list[[i]])
+  print(summary(decideTestsDGE(lrtSS.list[[i]])))
+}
+```
+
+####Add official gene symbols to lists and write the results of the DE analysis to a table:
+```{r}
+results_RBP10_SS <- topTags(lrt_RBP10_SS,n = length(y_RBP10$counts[,1]))
+results_RBP9_SS <- topTags(lrt_RBP9_SS,n = length(y_RBP9$counts[,1]))
+results_RBP8_SS <- topTags(lrt_RBP8_SS,n = length(y_RBP8$counts[,1]))
+results_RBP7_SS <- topTags(lrt_RBP7_SS,n = length(y_RBP7$counts[,1]))
+results_RBP6_SS <- topTags(lrt_RBP6_SS,n = length(y_RBP6$counts[,1]))
+results_RBP5_SS <- topTags(lrt_RBP5_SS,n = length(y_RBP5$counts[,1]))
+results_RBP4_SS <- topTags(lrt_RBP4_SS,n = length(y_RBP4$counts[,1]))
+results_RBP3_SS <- topTags(lrt_RBP3_SS,n = length(y_RBP3$counts[,1]))
+results_RBP2_SS <- topTags(lrt_RBP2_SS,n = length(y_RBP2$counts[,1]))
+results_RBP1_SS <- topTags(lrt_RBP1_SS,n = length(y_RBP1$counts[,1]))
+
+mart <- useMart("ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl",host="www.ensembl.org")
+ensembl2name <- getBM(attributes=c("ensembl_gene_id","external_gene_name"),mart=mart)
+
+results_RBP10_SS <- merge(x=results_RBP10_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP9_SS <- merge(x=results_RBP9_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP8_SS <- merge(x=results_RBP8_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP7_SS <- merge(x=results_RBP7_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP6_SS <- merge(x=results_RBP6_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP5_SS <- merge(x=results_RBP5_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP4_SS <- merge(x=results_RBP4_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP3_SS <- merge(x=results_RBP3_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP2_SS <- merge(x=results_RBP2_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+results_RBP1_SS <- merge(x=results_RBP1_SS$table, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+
+write.table(as.matrix(results_RBP10_SS),file="~/Desktop/190313_nsa_RBP10_DEG",sep="\t")
+write.table(as.matrix(results_RBP9_SS),file="~/Desktop/190313_nsa_RBP9_DEG",sep="\t")
+write.table(as.matrix(results_RBP8_SS),file="~/Desktop/190313_nsa_RBP8_DEG",sep="\t")
+write.table(as.matrix(results_RBP7_SS),file="~/Desktop/190313_nsa_RBP7_DEG",sep="\t")
+write.table(as.matrix(results_RBP6_SS),file="~/Desktop/190313_nsa_RBP6_DEG",sep="\t")
+write.table(as.matrix(results_RBP5_SS),file="~/Desktop/190313_nsa_RBP5_DEG",sep="\t")
+write.table(as.matrix(results_RBP4_SS),file="~/Desktop/190313_nsa_RBP4_DEG",sep="\t")
+write.table(as.matrix(results_RBP3_SS),file="~/Desktop/190313_nsa_RBP3_DEG",sep="\t")
+write.table(as.matrix(results_RBP2_SS),file="~/Desktop/190313_nsa_RBP2_DEG",sep="\t")
+write.table(as.matrix(results_RBP1_SS),file="~/Desktop/190313_nsa_RBP1_DEG",sep="\t")
+```
+
+####Write the fitted (TMM) values to a table:
+```{r}
+fit_RBP7_name <- merge(x=fit_RBP7$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP3_name <- merge(x=fit_RBP3$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP5_name <- merge(x=fit_RBP5$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP8_name <- merge(x=fit_RBP8$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP6_name <- merge(x=fit_RBP6$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP10_name <- merge(x=fit_RBP10$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP1_name <- merge(x=fit_RBP1$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP9_name <- merge(x=fit_RBP9$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP2_name <- merge(x=fit_RBP2$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+fit_RBP4_name <- merge(x=fit_RBP4$fitted.values, y=ensembl2name, by.x=0, by.y=1, all.x=TRUE)
+
+write.table(as.matrix(fit_RBP7_name),file="~/Desktop/190313_RBP7_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP3_name),file="~/Desktop/190313_RBP3_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP5_name),file="~/Desktop/190313_RBP5_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP8_name),file="~/Desktop/190313_RBP8_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP6_name),file="~/Desktop/190313_RBP6_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP10_name),file="~/Desktop/190313_RBP10_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP1_name),file="~/Desktop/190313_RBP1_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP9_name),file="~/Desktop/190313_RBP9_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP2_name),file="~/Desktop/190313_RBP2_nsa_TMM",sep="\t")
+write.table(as.matrix(fit_RBP4_name),file="~/Desktop/190313_RBP4_nsa_TMM",sep="\t")
+```
+
+####PCA plots for all samples together
+```{r}
+#In order to do PCA analysis on all samples together, we first normalize the samples similar to what was done for the DE analysis (TMM in edgeR) 
+counts_wco=counts[(rowSums(counts>0)>=3),]
+y=DGEList(counts_wco)
+y <- calcNormFactors(y)
+Experiment <- factor(c(rep(c(1,2,3,4), each=11)))
+siRNA <- factor(c("RBP7","RBP3","RBP5","RBP8","RBP6","NT","RBP10","RBP1","RBP9","RBP2","RBP4","RBP7","RBP3","RBP5","RBP8","RBP6","NT","RBP10","RBP1","RBP9","RBP2","RBP4","RBP7","RBP3","NT","RBP8","RBP6","RBP5","RBP10","RBP1","RBP9","RBP2","RBP4","RBP6","RBP1","NT","RBP4","RBP8","RBP10","RBP9","RBP2","RBP7","RBP3","RBP5"))
+design <- model.matrix(~Experiment+siRNA)
+rownames(design) <- colnames(y)
+y <- estimateGLMCommonDisp(y, design=design, verbose=TRUE)
+fit <- glmFit(y, design)
+```
+
+```{r}
+#Next we library normalize the TMM values:
+TMM=colSums(fit$fitted.values)
+
+TMM_LibrNorm = sweep(fit$fitted.values, 2, TMM, `/`)*mean(TMM)
+
+colSums(TMM_LibrNorm)
+```
+
+```{r}
+##PCA on normalized values
+par(pty="s") 
+PCA_norm<- prcomp(t(log2(TMM_LibrNorm+1)))
+Matrix <- summary(PCA_norm)
+col.def<-c("orange","blue","green", "purple")
+colors <- rep(col.def, each=11)
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 (", (Matrix$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", (Matrix$importance[2,4]*100),"%)"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,4],PCA_norm$x[,5],col=colors,pch=20,xlab=paste0("PC4 (", (Matrix$importance[2,4]*100), "%)"),ylab=paste0("PC5 (", (Matrix$importance[2,5]*100),"%)"),cex=2)
+text(PCA_norm$x[,4],PCA_norm$x[,5],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 (", (Matrix$importance[2,5]*100), "%)"),ylab=paste0("PC6 (", (Matrix$importance[2,6]*100),"%)"),cex=2)
+text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+```
+
+```{r}
+##PCA with colours by siRNA
+par(pty="s")
+PCA_norm<- prcomp(t(log2(TMM_LibrNorm+1)))
+Matrix <- summary(PCA_norm)
+col.def<-c("orange","purple","green","gold","chocolate","black","deeppink","darkturquoise","red","darkslateblue","blue","orange","purple","green","gold","chocolate","black","deeppink","darkturquoise","red","darkslateblue","blue","orange","purple","black","gold","chocolate","green","deeppink","darkturquoise","red","darkslateblue","blue","chocolate","darkturquoise","black","blue","gold","deeppink","red","darkslateblue","orange","purple","green")
+colors <- col.def
+
+plot(PCA_norm$x[,1],PCA_norm$x[,2],col=colors,pch=20,xlab=paste0("PC1 (", round(Matrix$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(Matrix$importance[2,2]*100),"%)"),cex=2)
+text(PCA_norm$x[,1],PCA_norm$x[,2],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,2],PCA_norm$x[,3],col=colors,pch=20,xlab=paste0("PC2 (", round(Matrix$importance[2,2]*100), "%)"),ylab=paste0("PC3 (", round(Matrix$importance[2,3]*100),"%)"),cex=2)
+text(PCA_norm$x[,2],PCA_norm$x[,3],labels=colnames(TMM_LibrNorm), pos=2, cex=0.5)
+
+plot(PCA_norm$x[,3],PCA_norm$x[,4],col=colors,pch=20,xlab=paste0("PC3 (", (Matrix$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", (Matrix$importance[2,4]*100),"%)"),cex=2)
+text(PCA_norm$x[,3],PCA_norm$x[,4],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,4],PCA_norm$x[,5],col=colors,pch=20,xlab=paste0("PC4 (", (Matrix$importance[2,4]*100), "%)"),ylab=paste0("PC5 (", (Matrix$importance[2,5]*100),"%)"),cex=2)
+text(PCA_norm$x[,4],PCA_norm$x[,5],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,5],PCA_norm$x[,6],col=colors,pch=20,xlab=paste0("PC5 (", (Matrix$importance[2,5]*100), "%)"),ylab=paste0("PC6 (", (Matrix$importance[2,6]*100),"%)"),cex=2)
+text(PCA_norm$x[,5],PCA_norm$x[,6],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,7],PCA_norm$x[,8],col=colors,pch=20,xlab=paste0("PC7 (", (Matrix$importance[2,7]*100), "%)"),ylab=paste0("PC8 (", (Matrix$importance[2,8]*100),"%)"),cex=2)
+text(PCA_norm$x[,7],PCA_norm$x[,8],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,9],PCA_norm$x[,10],col=colors,pch=20,xlab=paste0("PC9 (", (Matrix$importance[2,9]*100), "%)"),ylab=paste0("PC10 (", (Matrix$importance[2,10]*100),"%)"),cex=2)
+text(PCA_norm$x[,9],PCA_norm$x[,10],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,11],PCA_norm$x[,12],col=colors,pch=20,xlab=paste0("PC11 (", (Matrix$importance[2,11]*100), "%)"),ylab=paste0("PC12 (", (Matrix$importance[2,12]*100),"%)"),cex=2)
+text(PCA_norm$x[,11],PCA_norm$x[,12],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+
+plot(PCA_norm$x[,13],PCA_norm$x[,14],col=colors,pch=20,xlab=paste0("PC13 (", (Matrix$importance[2,13]*100), "%)"),ylab=paste0("PC14 (", (Matrix$importance[2,14]*100),"%)"),cex=2)
+text(PCA_norm$x[,13],PCA_norm$x[,14],labels=colnames(TMM_LibrNorm),pos=list(1), cex=0.5)
+```
+
+
+####RBP volcano (RBP1 example):
+```{r}
+#import previous results
+results_RBP1_SS = read.delim("~/Desktop/190313_RBP1_edgeR_DEG.tsv")
+```
+
+```{r}
+# set values outside axis limits to Inf
+upper_FDR_limit = 10
+
+results_RBP1_SS_limits = results_RBP1_SS
+results_RBP1_SS_limits$logFDR = -log10(results_RBP1_SS_limits$FDR)
+results_RBP1_SS_limits$logFDR[results_RBP1_SS_limits$logFDR > upper_FDR_limit] = Inf
+```
+
+
+```{r}
+RBP1_vp=results_RBP1_SS_limits
+rownames(RBP1_vp) = RBP1_vp$ensembl_ID
+
+#load list of genes to highlight
+highlight = read.delim("~/Desktop/200427_gene_highlight_list.txt", row.names = 1, header=TRUE)
+
+RBP1_vp_sub = subset(RBP1_vp, rownames(RBP1_vp) %in% rownames(highlight_RBP1))
+RBP1_vp_sub = subset(RBP1_vp_sub, abs(logFC)>log2(0) & FDR<0.05)
+
+RBP1_vp_plot = ggplot(RBP1_vp) +
+  geom_point(
+      data = RBP1_vp,
+      aes(x = logFC, y = logFDR),
+      alpha = 0.2,
+      color = "grey",
+      cex = 1
+    ) +
+  geom_point(
+      data = subset(RBP1_vp, abs(logFC)>log2(0) & FDR<0.05),
+      aes(x = logFC, y = logFDR),
+      alpha = 0.5,
+      color = "#20CBF8",
+      cex = 1
+    ) +
+  geom_point(
+      data = RBP1_vp_sub,
+      aes(x = logFC, y = logFDR),
+      fill = "#20CBF8",
+      color = "black",
+      pch = 21,
+      cex = 3
+    ) +
+  geom_text_repel(
+      data = RBP1_vp_sub,
+      aes(x = logFC, y = logFDR, label=gene_name),
+      size = 0.00001,
+      min.segment.length = 0, #use to always put a line
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+    ) +
+    ylim(0,10) +
+    xlim(-6,6) +
+    theme_bw(base_size = 14) +
+    theme(axis.text = element_blank()) +
+    ylab("") +
+    xlab("")
+
+RBP1_vp_plot
+```
+
+```{r}
+#print all volcanos to one figure
+g = plot_grid(ncol = 5,
+          RBP1_vp_plot,
+          RBP2_vp_plot,
+          RBP3_vp_plot,
+          RBP4_vp_plot,
+          RBP5_vp_plot,
+          RBP6_vp_plot,
+          RBP7_vp_plot,
+          RBP8_vp_plot,
+          RBP9_vp_plot,
+          RBP10_vp_plot
+)
+g
+```
