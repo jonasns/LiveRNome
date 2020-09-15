@@ -1,0 +1,175 @@
+---
+title: "200415 - Australia HCC cohort DESeq"
+output: html_notebook
+---
+
+####Load packages:
+```{r}
+library(DESeq2)
+```
+
+####Load packages and settings for multi-core processing
+```{r}
+library(BiocParallel)
+register(MulticoreParam(2))
+```
+
+####Load data:
+```{r}
+AUS <- read.delim("~/Desktop/170413_htseq_counts_AUS_chr1_22")
+cData_AUS <- read.delim("~/Desktop/190822_cData_AUS")
+```
+
+####Apply cutoff. Use at least 1 count in 1 or more samples:
+```{r}
+AUS_wco=AUS[(rowSums(AUS>0)>=1),]
+```
+
+####DE analysis with the DESeq2 package (samples are treated as paired)
+```{r}
+AUS.deseq <- DESeqDataSetFromMatrix(countData = AUS_wco,colData = cData_AUS, design = ~ ID + Stage)
+AUS.deseq <- DESeq(AUS.deseq, betaPrior=TRUE, parallel=TRUE)
+```
+
+####Normalize counts by library size:
+```{r}
+AUS.normalizedCounts<- t( t(counts(AUS.deseq))/ sizeFactors(AUS.deseq))
+```
+
+####PCA on normalized counts
+```{r}
+AUS.PCA<- prcomp(t(log2(AUS.normalizedCounts+1)))
+col.def<-c("red","blue")
+colors <- rep(col.def, each=1)
+M_AUS<-summary(AUS.PCA)
+par(pty="s")
+plot(AUS.PCA$x[,1],AUS.PCA$x[,2],col=colors,pch=20, cex=2,xlab=paste0("PC1 (", round(M_AUS$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(M_AUS$importance[2,2]*100),"%)"))
+plot(AUS.PCA$x[,3],AUS.PCA$x[,4],col=colors,pch=20, cex=2,xlab=paste0("PC3 (", round(M_AUS$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", round(M_AUS$importance[2,4]*100),"%)"))
+```
+
+####Next we library normalize the normalized counts values
+```{r}
+AUS.normalizedCounts_colSum=colSums(AUS.normalizedCounts)
+AUS.normalizedCounts_LibrNorm = sweep(AUS.normalizedCounts, 2, AUS.normalizedCounts_colSum, `/`)*(mean(colSums(AUS.normalizedCounts)))
+colSums(AUS.normalizedCounts_LibrNorm)
+```
+
+####PCA on library size normalized counts
+```{r}
+AUS.PCA<- prcomp(t(log2(AUS.normalizedCounts_LibrNorm+1)))
+col.def<-c("red","blue")
+colors <- rep(col.def, each=1)
+M_AUS<-summary(AUS.PCA)
+par(pty="s")
+plot(AUS.PCA$x[,1],AUS.PCA$x[,2],col=colors,pch=20, cex=2,xlab=paste0("PC1 (", round(M_AUS$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(M_AUS$importance[2,2]*100),"%)"))
+#text(AUS.PCA$x[,1],AUS.PCA$x[,2],labels=colnames(AUS_wco),cex=0.5)
+plot(AUS.PCA$x[,3],AUS.PCA$x[,4],col=colors,pch=20, cex=2,xlab=paste0("PC3 (", round(M_AUS$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", round(M_AUS$importance[2,4]*100),"%)"))
+#text(AUS.PCA$x[,3],AUS.PCA$x[,4],labels=colnames(AUS_wco),cex=0.5)
+```
+
+####Write the DE analysis results and normalized counts to a table:
+```{r}
+res.AUS_wco <- results(AUS.deseq, alpha=0.05, lfcThreshold=0,independentFiltering = TRUE, contrast =list("Stagetumor","Stagecontrol"))
+write.table(res.AUS_wco, "~/Desktop/170418_deseq_JNS_no07PM0230_wco_LFC0",sep="\t")
+write.table(AUS.normalizedCounts, "~/Desktop/170418_libr_size_norm_counts_JNS_no07PM0230_wco_corrected_htseq",sep="\t")
+```
+
+####Volcano plot
+```{r}
+library(ggplot2)
+library(ggfortify)
+
+AUSresults <- read.delim("~/Desktop/Livernome_input/170418_deseq_JNS_no07PM0230_wco_LFC0", sep="\t")
+RBPs <- read.delim("~/Desktop/Livernome_input/190823_170214_hRBP_final_list.txt")
+vp=AUSresults
+highlight = read.delim("~/Desktop/Livernome_input/200427_gene_highlight_list.txt", row.names = 1, header=TRUE)
+
+setwd("~/Desktop")
+pdf("200507_AUS_volcano.pdf", height=3, width=3)
+par(pty="s")
+par(mar=c(2,2,2,2))
+
+vp_sub = subset(vp, rownames(vp) %in% rownames(highlight))
+vp_sub = subset(vp_sub, abs(log2FoldChange)>log2(2) & padj<0.05)
+vp_sub = merge(x=vp_sub, y=highlight, by.x=0, by.y=0, all.x=TRUE)
+#vp_sub = vp_sub[,2:9]
+
+RBP_sub = subset(vp, abs(log2FoldChange)>log2(2) & padj<0.05 & row.names(vp)%in%RBPs[,1])
+RBP_sub_ns = subset(vp, padj>0.05 & row.names(vp)%in%RBPs[,1])
+
+vp_plot= ggplot(vp) +
+  geom_point(
+      data = vp,
+      aes(x = log2FoldChange, y = -log10(padj)),
+      color = "grey",
+      cex = 1
+    ) +
+    geom_point(
+      data = RBP_sub_ns,
+      aes(x = log2FoldChange, y = -log10(padj)),
+      color = "chartreuse4",
+      cex = 1
+    ) +
+    geom_point(
+      data = RBP_sub,
+      aes(x = log2FoldChange, y = -log10(padj)),
+      fill = "darkgreen",
+      color = "black",
+      cex = 1.5,
+      pch = 21
+    ) +
+    theme_bw(base_size = 14) +
+    ggtitle("Australia HCC cohort") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_x_continuous(limits = c(-7.5, 7.5)) +
+    scale_y_continuous(limits = c(0, 50))
+
+vp_plot
+print(vp_plot, newpage = FALSE)
+dev.off()
+```
+
+####Session Info:
+```{r}
+sessionInfo()
+```
+R version 3.6.1 (2019-07-05)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS Catalina 10.15.3
+
+Matrix products: default
+BLAS:   /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] parallel  stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] DESeq2_1.26.0               SummarizedExperiment_1.16.1 DelayedArray_0.12.2        
+ [4] BiocParallel_1.20.1         matrixStats_0.56.0          Biobase_2.46.0             
+ [7] GenomicRanges_1.38.0        GenomeInfoDb_1.22.1         IRanges_2.20.2             
+[10] S4Vectors_0.24.3            BiocGenerics_0.32.0        
+
+loaded via a namespace (and not attached):
+ [1] bit64_0.9-7            splines_3.6.1          Formula_1.2-3          assertthat_0.2.1      
+ [5] latticeExtra_0.6-29    blob_1.2.1             GenomeInfoDbData_1.2.2 pillar_1.4.3          
+ [9] RSQLite_2.2.0          backports_1.1.6        lattice_0.20-41        glue_1.4.0            
+[13] digest_0.6.25          RColorBrewer_1.1-2     XVector_0.26.0         checkmate_2.0.0       
+[17] colorspace_1.4-1       htmltools_0.4.0        Matrix_1.2-18          XML_3.99-0.3          
+[21] pkgconfig_2.0.3        genefilter_1.68.0      zlibbioc_1.32.0        purrr_0.3.3           
+[25] xtable_1.8-4           scales_1.1.0           jpeg_0.1-8.1           htmlTable_1.13.3      
+[29] tibble_3.0.0           annotate_1.64.0        ggplot2_3.3.0          ellipsis_0.3.0        
+[33] nnet_7.3-13            cli_2.0.2              survival_3.1-12        magrittr_1.5          
+[37] crayon_1.3.4           memoise_1.1.0          fansi_0.4.1            foreign_0.8-76        
+[41] tools_3.6.1            data.table_1.12.8      lifecycle_0.2.0        stringr_1.4.0         
+[45] locfit_1.5-9.4         munsell_0.5.0          cluster_2.1.0          AnnotationDbi_1.48.0  
+[49] compiler_3.6.1         rlang_0.4.5            grid_3.6.1             RCurl_1.98-1.1        
+[53] rstudioapi_0.11        htmlwidgets_1.5.1      bitops_1.0-6           base64enc_0.1-3       
+[57] gtable_0.3.0           DBI_1.1.0              R6_2.4.1               gridExtra_2.3         
+[61] knitr_1.28             dplyr_0.8.5            bit_1.1-15.2           Hmisc_4.4-0           
+[65] stringi_1.4.6          Rcpp_1.0.4.6           geneplotter_1.64.0     vctrs_0.2.4           
+[69] rpart_4.1-15           acepack_1.4.1          png_0.1-7              tidyselect_1.0.0      
+[73] xfun_0.12      
