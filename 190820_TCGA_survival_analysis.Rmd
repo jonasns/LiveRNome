@@ -1,46 +1,138 @@
 ---
-title: "190820 - TCGA survival analysis top 10 RBPs"
+title: "200629 - TCGA survival analysis top 10 RBPs"
 output: html_notebook
 ---
 
-####Install packages:
-```{r}
-#install.packages("dplyr")
-#install.packages("survminer")
-```
 
 ####Load packages:
-```{r}
+```{r, messages=FALSE}
 library(survminer)
 library(dplyr)
+library(survival)
+library(ggrepel)
 ```
 
 ####Session Info
 ```{r}
 sessionInfo()
 ```
+R version 3.4.3 (2017-11-30)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS High Sierra 10.13.6
 
-####Load data:
+Matrix products: default
+BLAS: /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.4/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] ggrepel_0.8.1   survival_3.1-8  dplyr_0.8.4     survminer_0.4.6 ggpubr_0.2.4    magrittr_1.5    ggplot2_3.2.1   edgeR_3.20.9    limma_3.34.9   
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_1.0.3        pillar_1.4.3      compiler_3.4.3    tools_3.4.3       lifecycle_0.1.0   tibble_2.1.3      gtable_0.3.0      nlme_3.1-137      lattice_0.20-38   pkgconfig_2.0.3   rlang_0.4.4      
+[12] Matrix_1.2-17     rstudioapi_0.11   yaml_2.2.1        xfun_0.12         gridExtra_2.3     withr_2.1.2       knitr_1.28        survMisc_0.5.5    generics_0.0.2    vctrs_0.2.2       locfit_1.5-9.1   
+[23] grid_3.4.3        tidyselect_1.0.0  data.table_1.12.0 glue_1.3.1        KMsurv_0.1-5      R6_2.4.1          km.ci_0.5-2       purrr_0.3.3       tidyr_1.0.2       splines_3.4.3     scales_1.1.0     
+[34] backports_1.1.5   assertthat_0.2.1  xtable_1.8-4      colorspace_1.4-1  ggsignif_0.6.0    lazyeval_0.2.2    munsell_0.5.0     broom_0.5.4       crayon_1.3.4      zoo_1.8-7        
+
+####New 200420: load the original count table. Normalize. Split into lo, mid, hi in R based on tertile. Merge with metadata table
+
+####load data
 ```{r}
-#Data has been pre-ordered into tertiles based on RNA-seq determined expression of the RBP in question
-#Tumor stage has been ordered into simple stage, by e.g. taking iiia, iiib, and iiic pooled into iii 
-TCGAsurv <- read.delim("~/Desktop/190701_TCGAsurv_allRBPs.txt", row.names = 1)
-glimpse(TCGAsurv)
+TCGAcounts = read.delim("~/Desktop/Livernome_input/170710_all_TCGA_tumors_htseq_counts.txt", row.names = 1)
+
+#note: since files are combined by htseq count file name, we have to load the file again, where the header is not the column names. Because R adds an X in front of numbers when used for colnames
+TCGAcounts_header = read.delim("~/Desktop/Livernome_input/170710_all_TCGA_tumors_htseq_counts.txt", row.names = 1, header = FALSE)
+TCGAcounts_header = TCGAcounts_header[1,]
+TCGAcounts_header = t(TCGAcounts_header)
 ```
+
 ```{r}
+TCGAmeta = read.delim("~/Desktop/Livernome_input/200420_TCGA_LIHC_metadata.txt", row.names = 6)
+```
+
+```{r}
+#Merge the two tables together, in order to only analyze patients with metadata
+TCGAcounts_meta = t(TCGAcounts)
+rownames(TCGAcounts_meta) = TCGAcounts_header[1:425,]
+TCGAcounts_meta = merge(x=TCGAcounts_meta, y=TCGAmeta, by.x=0, by.y=0, all.x=FALSE)
+TCGAcounts_meta = t(TCGAcounts_meta)
+```
+
+```{r}
+#Because the combined file is a character matrix we export and import again after cleaning a bit in Vim/Excel. Can also just start here with loading the 200421_TCGAcounts_withmeta_clean.txt file
+write.table(as.matrix(TCGAcounts_meta),file="~/Desktop/200421_TCGAcounts_withmeta",sep="\t")
+TCGAcounts_meta = read.delim("~/Desktop/Livernome_input/200421_TCGAcounts_withmeta_clean.txt", row.names = 1, header = TRUE)
+```
+
+```{r}
+#Next we library normalize the counts values
+TCGAcounts_colSum=colSums(TCGAcounts_meta)
+TCGAcounts_LibrNorm = sweep(TCGAcounts_meta, 2, TCGAcounts_colSum, `/`)*(mean(TCGAcounts_colSum))
+#colSums(TCGAcounts_LibrNorm)
+```
+
+```{r}
+#Export normalized counts
+write.table(as.matrix(TCGAcounts_LibrNorm),file="~/Desktop/200504_TCGAcounts_LibrNorm_withmeta",sep="\t")
+```
+
+```{r}
+#convert counts to lo, mid, hi categories by expression based on tertiles. (http://www.unige.ch/ses/sococ/cl/r/groups.e.html, https://stackoverflow.com/questions/16184947/cut-error-breaks-are-not-unique)
+TCGAcounts_himilo = t(TCGAcounts_LibrNorm) #make sure that it is the rows (genes) that are split, not the samples!
+for(i in 1:dim(TCGAcounts_himilo)[2]) {
+  breaks = quantile(TCGAcounts_himilo[,i], c(0, 1/3, 2/3, 1))
+  breaks = breaks + seq_along(breaks) * .Machine$double.eps #This is to make the breaks slightly different
+  TCGAcounts_himilo[,i] = cut(TCGAcounts_himilo[,i], breaks, labels = c("low", "mid", "high"), include.lowest = TRUE)
+}
+TCGAcounts_himilo = t(TCGAcounts_himilo)
+
+#I'm not sure why the labels disappear when running cut on specific column. However: 1: low, 2: mid, and 3: high
+#and zeroes becomes NA
+```
+
+```{r}
+#convert all NA's to 1s (because they are in the low category)
+TCGAcounts_himilo[is.na(TCGAcounts_himilo)] = 1
+```
+
+```{r}
+#Add the header back
+TCGAcounts_header = read.delim("~/Desktop/Livernome_input/200421_TCGAcounts_withmeta_clean.txt", row.names = 1, header = FALSE)
+TCGAcounts_header = TCGAcounts_header[1,]
+TCGAcounts_header = t(TCGAcounts_header)
+```
+
+####Merge again with metadata table
+```{r, warning=FALSE}
+TCGAcounts_himilo_meta = t(TCGAcounts_himilo)
+colnames(TCGAcounts_himilo_meta) = TCGAcounts$gene_symbol #change ensembl to gene symbol. NOTE: not all genes have an official gene symbol in the htseq count file. Therefore a bunch of NA's are introduced here. Unless your gene of interest is among them, you can ignore this.
+rownames(TCGAcounts_himilo_meta) = TCGAcounts_header[1:365,]
+TCGAcounts_himilo_meta = merge(x=TCGAcounts_himilo_meta, y=TCGAmeta, by.x=0, by.y=0, all.x=TRUE)
+```
+
+```{r}
+TCGAsurv = TCGAcounts_himilo_meta
+
 #Setting reference group for Hazard Ratio computed using coxph function in R
 TCGAsurv$tumor_stage_simple <- factor(TCGAsurv$tumor_stage_simple, levels = c("stage i","stage ii","stage iii","stage iv", "not reported"))
+```
 
-TCGAsurv$RBP1 <- factor(TCGAsurv$RBP1, levels = c("lo","mid","hi"))
-TCGAsurv$RBP2 <- factor(TCGAsurv$RBP2, levels = c("lo","mid","hi"))
-TCGAsurv$RBP3 <- factor(TCGAsurv$RBP3, levels = c("lo","mid","hi"))
-TCGAsurv$RBP4 <- factor(TCGAsurv$RBP4, levels = c("lo","mid","hi"))
-TCGAsurv$RBP5 <- factor(TCGAsurv$RBP5, levels = c("lo","mid","hi"))
-TCGAsurv$RBP6 <- factor(TCGAsurv$RBP6, levels = c("lo","mid","hi"))
-TCGAsurv$RBP7 <- factor(TCGAsurv$RBP7, levels = c("lo","mid","hi"))
-TCGAsurv$RBP8 <- factor(TCGAsurv$RBP8, levels = c("lo","mid","hi"))
-TCGAsurv$RBP9 <- factor(TCGAsurv$RBP9, levels = c("lo","mid","hi"))
-TCGAsurv$RBP10 <- factor(TCGAsurv$RBP10, levels = c("lo","mid","hi"))
+```{r}
+TCGAsurv$RBP1 <- factor(TCGAsurv$RBP1, levels = c("1","3"))
+TCGAsurv$RBP8 <- factor(TCGAsurv$RBP8, levels = c("1","3"))
+TCGAsurv$RBP9 <- factor(TCGAsurv$RBP9, levels = c("1","3"))
+TCGAsurv$RBP10 <- factor(TCGAsurv$RBP10, levels = c("1","3"))
+TCGAsurv$RBP4 <- factor(TCGAsurv$RBP4, levels = c("1","3"))
+TCGAsurv$RBP2 <- factor(TCGAsurv$RBP2, levels = c("1","3"))
+TCGAsurv$RBP7 <- factor(TCGAsurv$RBP7, levels = c("1","3"))
+TCGAsurv$RBP3 <- factor(TCGAsurv$RBP3, levels = c("1","3"))
+TCGAsurv$RBP6 <- factor(TCGAsurv$RBP6, levels = c("1","3"))
+TCGAsurv$RBP5 <- factor(TCGAsurv$RBP5, levels = c("1","3"))
 ```
 
 ####Base survival analysis of the TCGA-LIHC dataset
@@ -63,24 +155,22 @@ TCGA.fit.coxph <- coxph(TCGA_surv_object ~ tumor_stage_simple, data = TCGAsurv)
 ggforest(TCGA.fit.coxph, data = TCGAsurv)
 ```
 
-
 ```{r}
 #Age distribution in the TCGA-LIHC cohort
 hist(TCGAsurv$age_at_diagnosis/365)
 ```
-
 
 ```{r}
 #binning of age groups
 x <- cut(TCGAsurv$age_at_diagnosis/365, breaks=c(0,40,60,75,110), labels=c("0-40","40-60","60-75","75+"))
 TCGAsurv$age_at_diagnosis = x
 ```
+
 ```{r}
 #survival graph based on age
 fitTCGA1 <- survfit(TCGA_surv_object ~ age_at_diagnosis, data = TCGAsurv)
 ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
 ```
-
 
 ```{r}
 #forest plot of age
@@ -95,7 +185,7 @@ ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.tabl
 ```
 
 ```{r}
-#barplots of age
+#barplots of gender
 par(mar=c(6,3,1,1))
 barplot(table(TCGAsurv$gender), las =2)
 ```
@@ -106,21 +196,7 @@ TCGA.fit.coxph <- coxph(TCGA_surv_object ~ gender, data = TCGAsurv)
 ggforest(TCGA.fit.coxph, data = TCGAsurv)
 ```
 
-####Suvival analysis of top10 RBPs from the TCGA-LIHC
-```{r}
-#forest plot of RBPs and metadata
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ tumor_stage_simple + age_at_diagnosis + gender + RBP2 + RBP5 + RBP3 + RBP6 + RBP4 + RBP1 + RBP9 + RBP10 + RBP8 + RBP7, 
-                   data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
-
-```{r}
-#forest plot of RBPs without metadata
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP2 + RBP5 + RBP3 + RBP6 + RBP4 + RBP1 + RBP9 + RBP10 + RBP8 + RBP7, 
-                   data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
-
+####Suvival analysis of top10 RBPs from the TCGA-LIHC (RBP1 example)
 ```{r}
 #survival graph based on RBP1 expression (tertiles)
 fitTCGA1 <- survfit(TCGA_surv_object ~ RBP1, data = TCGAsurv)
@@ -140,160 +216,516 @@ ggforest(TCGA.fit.coxph, data = TCGAsurv)
 ```
 
 ```{r}
-#survival graph based on RBP2 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP2, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+#survival graph based on RBP1 expression (tertiles)
+TCGAsurv$RBP1 <- factor(TCGAsurv$RBP1, levels = c("1","3"))
+fitTCGA1 <- survfit(TCGA_surv_object ~ RBP1, data = TCGAsurv)
+gg = ggsurvplot(fitTCGA1, 
+           data = TCGAsurv,
+           log.rank.weights = "1",
+           pval = TRUE,
+           pval.coord = c(10,4),
+           pval.method = TRUE,
+           pval.method.coord = c(10,10),
+           censor.size = 3,
+           fun = "pct",
+           palette = c("#20CBF8","#000000"),
+           legend = "bottom", 
+           risk.table = FALSE, 
+           xscale=365, 
+           break.x.by=365, 
+           xlab = "Time (years)")
+gg
 ```
 
 ```{r}
-#forest plot of RBP2 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP2, data = TCGAsurv)
+#forest plot of RBP1 and metadata (adjusting for tumor-stage, age, and gender)
+TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP1 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
 ggforest(TCGA.fit.coxph, data = TCGAsurv)
+
+```
+
+####survival graph of all RBPs (for Fig. 1)
+```{r}
+#Load lists of RBP names to use
+RBPlist = read.delim("~/Desktop/Livernome_input/170214_hRBP_list", row.names = 2)
+RBPlist = t(RBPlist)
 ```
 
 ```{r}
-#forest plot of RBP2 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP2 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+RBP_up = read.delim("~/Desktop/Livernome_input/200506_common_UP_RBPs.txt", row.names = 2)
+RBP_dn = read.delim("~/Desktop/Livernome_input/200506_common_DOWN_RBPs.txt", row.names = 2)
+
+RBP_up = t(RBP_up)
+RBP_dn = t(RBP_dn)
+```
+
+
+```{r}
+#Upregulated RBPs
+setwd("~/Desktop/200506_TCGAsurv_allRBPs/UP/")
+genes<-colnames(RBP_up)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+
+for (i in 1:length(genes)){
+  TCGAsurv[[genes[i]]] <- factor(TCGAsurv[[genes[i]]], levels = c("1","3"))
+  pdf(paste("200506_UP_",genes[i], "_surv.pdf", sep = ""))
+  fitTCGA1 <- survfit(as.formula(paste0("Surv(time , event)~",genes[i])), data = TCGAsurv)
+  gg=ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+  print(gg, newpage = FALSE)
+  dev.off()
+}
+
 ```
 
 ```{r}
-#survival graph based on RBP3 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP3, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+#Downregulated RBPs
+setwd("~/Desktop/200506_TCGAsurv_allRBPs/DOWN")
+genes<-colnames(RBP_dn)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+
+for (i in 1:length(genes)){
+  TCGAsurv[[genes[i]]] <- factor(TCGAsurv[[genes[i]]], levels = c("1","3"))
+  pdf(paste("200506_DN_",genes[i], "_surv.pdf", sep = ""))
+  fitTCGA1 <- survfit(as.formula(paste0("Surv(time , event)~",genes[i])), data = TCGAsurv)
+  gg=ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+  print(gg, newpage = FALSE)
+  dev.off()
+}
+
+```
+
+
+```{r}
+#forest plot of all UP RBPs and metadata (adjusting for tumor-stage, age, and gender. see: http://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html bottom example)
+setwd("~/Desktop/200506_TCGAsurv_allRBPs/UP/forest/")
+genes<-colnames(RBP_up)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+tumor_stage_simple = TCGAsurv$tumor_stage_simple
+age_at_diagnosis = TCGAsurv$age_at_diagnosis
+gender = TCGAsurv$gender
+
+for (i in 1:length(genes)){
+  pdf(paste("190702_",genes[i], "_forest_age_stage_gender_corrected.pdf", sep = ""))
+  TCGA.fit.coxph <- coxph(as.formula(paste0("Surv(time , event)~",genes[i]," + tumor_stage_simple + age_at_diagnosis + gender")), data = TCGAsurv)
+  gg=ggforest(TCGA.fit.coxph, data = TCGAsurv)
+  print(gg, newpage = FALSE)
+  dev.off()
+}
 ```
 
 ```{r}
-#forest plot of RBP3 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP3, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+#forest plot of all DOWN RBPs and metadata (adjusting for tumor-stage, age, and gender. see: http://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html bottom example)
+setwd("~/Desktop/200506_TCGAsurv_allRBPs/DOWN/forest/")
+genes<-colnames(RBP_dn)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+tumor_stage_simple = TCGAsurv$tumor_stage_simple
+age_at_diagnosis = TCGAsurv$age_at_diagnosis
+gender = TCGAsurv$gender
+
+for (i in 1:length(genes)){
+  pdf(paste("190702_",genes[i], "_forest_age_stage_gender_corrected.pdf", sep = ""))
+  TCGA.fit.coxph <- coxph(as.formula(paste0("Surv(time , event)~",genes[i]," + tumor_stage_simple + age_at_diagnosis + gender")), data = TCGAsurv)
+  gg=ggforest(TCGA.fit.coxph, data = TCGAsurv)
+  print(gg, newpage = FALSE)
+  dev.off()
+}
 ```
+
+
+
 ```{r}
-#forest plot of RBP3 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP3 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+#UP data from forest plot of all RBPs and metadata (adjusting for tumor-stage, age, and gender. see: http://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html bottom example)
+setwd("~/Desktop/200506_TCGAsurv_allRBPs/UP/forest/text_data/")
+genes<-colnames(RBP_up)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+tumor_stage_simple = TCGAsurv$tumor_stage_simple
+age_at_diagnosis = TCGAsurv$age_at_diagnosis
+gender = TCGAsurv$gender
+
+for (i in 1:length(genes)){
+  TCGA.fit.coxph <- coxph(as.formula(paste0("Surv(time , event)~",genes[i]," + tumor_stage_simple + age_at_diagnosis + gender")), data = TCGAsurv)
+  gg=summary(TCGA.fit.coxph)
+  pvc <- coef(summary(TCGA.fit.coxph))[,5]
+  hr <- round(coef(summary(TCGA.fit.coxph))[,2],3)
+  myfile <- file.path(paste0("200506_", genes[i], "_coxph_pval_age_stage_gender_corrected.txt"))
+  write.csv(pvc, file=myfile, sep = "")
+  myfile_hr <- file.path(paste0("200506_", genes[i], "_coxph_hr_age_stage_gender_corrected.txt"))
+  write.csv(hr, file=myfile_hr, sep = "")
+  }
+```
+
+Now go to the folder with the textfiles and cat *hr*.txt > 200506_UP_RBPs_coxph_hr_age_stage_gender_corrected.txt and cat *pval*.txt > 200506_UP_RBPs_coxph_pval_age_stage_gender_corrected.txt. These can be imported to Excel, and only unique from column A kept. Can use vlookup to merge the 2 files. Then import again:
+
+```{r}
+TCGAcoxph_UP_summary <- read.delim("~/Desktop/Livernome_input/200506_UP_RBPs_coxph_pval_hr_age_stage_gender_corrected.txt", row.names = 1)
 ```
 
 ```{r}
-#survival graph based on RBP4 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP4, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+#DOWN data from forest plot of all RBPs and metadata (adjusting for tumor-stage, age, and gender. see: http://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html bottom example)
+setwd("~/Desktop/200506_TCGAsurv_allRBPs/DOWN/forest/text_data/")
+genes<-colnames(RBP_dn)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+tumor_stage_simple = TCGAsurv$tumor_stage_simple
+age_at_diagnosis = TCGAsurv$age_at_diagnosis
+gender = TCGAsurv$gender
+
+for (i in 1:length(genes)){
+  TCGA.fit.coxph <- coxph(as.formula(paste0("Surv(time , event)~",genes[i]," + tumor_stage_simple + age_at_diagnosis + gender")), data = TCGAsurv)
+  gg=summary(TCGA.fit.coxph)
+  pvc <- coef(summary(TCGA.fit.coxph))[,5]
+  hr <- round(coef(summary(TCGA.fit.coxph))[,2],3)
+  myfile <- file.path(paste0("200506_", genes[i], "_coxph_pval_age_stage_gender_corrected.txt"))
+  write.csv(pvc, file=myfile, sep = "")
+  myfile_hr <- file.path(paste0("200506_", genes[i], "_coxph_hr_age_stage_gender_corrected.txt"))
+  write.csv(hr, file=myfile_hr, sep = "")
+  }
+```
+
+Now go to the folder with the textfiles and: cat *hr*.txt > 200506_DN_RBPs_coxph_hr_age_stage_gender_corrected.txt and cat *pval*.txt > 200506_DN_RBPs_coxph_pval_age_stage_gender_corrected.txt. These can be imported to Excel, and only unique from column A kept. Can use vlookup to merge the 2 files. Then import again:
+
+```{r}
+TCGAcoxph_DN_summary <- read.delim("~/Desktop/Livernome_input/200506_DN_RBPs_coxph_pval_hr_age_stage_gender_corrected.txt", row.names = 1)
+```
+
+####UP/DOWN RBPs volcano:
+```{r}
+RBP_UP_vp=TCGAcoxph_UP_summary
+RBP_DN_vp=TCGAcoxph_DN_summary
+
+RBP_UP_vp_sub = subset(RBP_UP_vp, hr>0.1 & pval<0.5)
+RBP_DN_vp_sub = subset(RBP_DN_vp, hr<-0.1 & pval<0.5)
+
+RBP_UPDN_vp_plot = ggplot(RBP_UP_vp) +
+  geom_point(
+      data = RBP_UP_vp,
+      aes(x = log2(hr), y = -log10(pval)),
+      fill = "blue",
+      color = "black",
+      cex = 2,
+      pch = 21
+    ) +
+  geom_point(
+      data = RBP_DN_vp,
+      aes(x = log2(hr), y = -log10(pval)),
+      fill = "red",
+      color = "black",
+      cex = 2,
+      pch = 21
+    ) +
+  geom_text_repel(
+      data = RBP_UP_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(RBP_UP_vp_sub)),
+      size = 5,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+  geom_text_repel(
+      data = RBP_DN_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(RBP_DN_vp_sub)),
+      size = 5,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+      theme_bw(base_size = 14)
+      
+RBP_UPDN_vp_plot
 ```
 
 ```{r}
-#forest plot of RBP4 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP4, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+#Add normalized mean counts as size of the points:
+name_conversion = read.delim("~/Desktop/200511_gencode.v27.annotation_conversion_table.txt", row.names = 1)
+TCGAcounts_LibrNorm_rowmean = rowMeans(TCGAcounts_LibrNorm)
+TCGAcounts_LibrNorm_geneid = merge(x=TCGAcounts_LibrNorm_rowmean, y=name_conversion, by.x=0, by.y=0, all.x=FALSE)
+
+TCGAcoxph_DN_summary_count = merge(x=TCGAcoxph_DN_summary, y=TCGAcounts_LibrNorm_geneid, by.x=0, by.y=4, all.x=TRUE)
+row.names(TCGAcoxph_DN_summary_count) = TCGAcoxph_DN_summary_count$Row.names
+
+TCGAcoxph_UP_summary_count = merge(x=TCGAcoxph_UP_summary, y=TCGAcounts_LibrNorm_geneid, by.x=0, by.y=4, all.x=TRUE)
+row.names(TCGAcoxph_UP_summary_count) = TCGAcoxph_UP_summary_count$Row.names
 ```
 
 ```{r}
-#forest plot of RBP4 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP4 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+#Scale the normalized counts from 0-1:
+library(scales)
+TCGAcoxph_DN_summary_count$relExp = rescale(TCGAcoxph_DN_summary_count$x, to = c(0, 1))
+TCGAcoxph_UP_summary_count$relExp = rescale(TCGAcoxph_UP_summary_count$x, to = c(0, 1))
+```
+
+
+####UP/DOWN RBPs volcano (with size added):
+```{r}
+RBP_UP_vp=TCGAcoxph_UP_summary_count
+RBP_DN_vp=TCGAcoxph_DN_summary_count
+RBP_UPDN_vp = rbind(RBP_UP_vp, RBP_DN_vp)
+
+RBP_UP_vp_sub = subset(RBP_UP_vp, hr>1 & pval<0.05)
+RBP_DN_vp_sub = subset(RBP_DN_vp, hr<abs(1) & pval<0.05)
+
+size_up = TCGAcoxph_UP_summary_count$relExp
+size_dn = TCGAcoxph_DN_summary_count$relExp
+
+RBP_UPDN_vp_plot = ggplot(RBP_UP_vp,
+                          aes(x = log2(hr), y = -log10(pval))
+                          ) +
+  geom_point(
+      aes(size = size_up),
+      alpha = 0.8,
+      fill = "darkgreen",
+      color = "black",
+      pch = 21
+    ) +
+  geom_point(
+      data = RBP_DN_vp,
+      aes(x = log2(hr), y = -log10(pval), size = size_dn),
+      alpha = 0.8,
+      fill = "grey",
+      color = "black",
+      pch = 21
+    ) +
+  geom_text_repel(
+      data = RBP_UP_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(RBP_UP_vp_sub)),
+      size = 4,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+  geom_text_repel(
+      data = RBP_DN_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(RBP_DN_vp_sub)),
+      size = 4,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+      theme_bw(base_size = 14) +
+  labs(size="rel.exp.", x = "log2(hazard ratio)") +
+  guides(size=guide_legend(override.aes=list(fill="white")))
+
+RBP_UPDN_vp_plot
 ```
 
 ```{r}
-#survival graph based on RBP5 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP5, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+RBP_UP_vp=TCGAcoxph_UP_summary_count
+RBP_DN_vp=TCGAcoxph_DN_summary_count
+RBP_UPDN_vp = rbind(RBP_UP_vp, RBP_DN_vp)
+
+size_updn = log10(RBP_UPDN_vp$x)
+
+ggplot(RBP_UPDN_vp,
+             aes(x = log2(hr), y = -log10(pval))) + 
+             geom_point(aes(size = size_updn), fill = "blue", color = "black", pch = 21) +
+  geom_point(
+      data = RBP_DN_vp,
+      aes(x = log2(hr), y = -log10(pval), size = size_dn),
+      size = size_dn,
+      alpha = size_dn/5,
+      fill = "red",
+      color = "black",
+      cex = 1,
+      pch = 21
+  ) +
+             theme_bw(base_size = 14) + 
+            labs(size="log10(count)")
+
+```
+
+####hazard volcanoes of top10 RBP familiess (for appendix)
+```{r}
+RBP_family = read.delim("~/Desktop/200629_TOP10_RBP_families.txt", row.names = 2)
+
+RBP_family = t(RBP_family)
 ```
 
 ```{r}
-#forest plot of RBP5 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP5, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+setwd("~/Desktop/200629_TOP10_RBP_families/")
+genes<-colnames(RBP_family)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+
+for (i in 1:length(genes)){
+  TCGAsurv[[genes[i]]] <- factor(TCGAsurv[[genes[i]]], levels = c("1","3"))
+  pdf(paste("200629_",genes[i], "_surv.pdf", sep = ""))
+  fitTCGA1 <- survfit(as.formula(paste0("Surv(time , event)~",genes[i])), data = TCGAsurv)
+  gg=ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+  print(gg, newpage = FALSE)
+  dev.off()
+}
+
 ```
 
 ```{r}
-#forest plot of RBP5 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP5 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+#forest plot of RBP families and metadata (adjusting for tumor-stage, age, and gender. see: http://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html bottom example)
+setwd("~/Desktop/200629_TOP10_RBP_families/forest/")
+genes<-colnames(RBP_family)
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
+tumor_stage_simple = TCGAsurv$tumor_stage_simple
+age_at_diagnosis = TCGAsurv$age_at_diagnosis
+gender = TCGAsurv$gender
+
+for (i in 1:length(genes)){
+  TCGA.fit.coxph <- coxph(as.formula(paste0("Surv(time , event)~",genes[i]," + tumor_stage_simple + age_at_diagnosis + gender")), data = TCGAsurv)
+  gg=summary(TCGA.fit.coxph)
+  pvc <- coef(summary(TCGA.fit.coxph))[,5]
+  hr <- round(coef(summary(TCGA.fit.coxph))[,2],3)
+  myfile <- file.path(paste0("200629_", genes[i], "_coxph_pval_age_stage_gender_corrected.txt"))
+  write.csv(pvc, file=myfile, sep = "")
+  myfile_hr <- file.path(paste0("200629_", genes[i], "_coxph_hr_age_stage_gender_corrected.txt"))
+  write.csv(hr, file=myfile_hr, sep = "")
+  }
+```
+
+Now go to the folder with the textfiles and cat *hr*.txt > 200629_TOP10_RBPfamilies_coxph_hr_age_stage_gender_corrected.txt and cat *pval*.txt > 200629_TOP10_RBPfamilies_coxph_pval_age_stage_gender_corrected.txt. These can be imported to Excel, and only unique from column A kept. Can use vlookup to merge the 2 files. Then import again:
+
+```{r}
+TCGAcoxph_RBPfamily_summary <- read.delim("~/Desktop/Livernome_input/200629_TOP10_RBPfamilies_coxph_pval_hr_age_stage_gender_corrected.txt", row.names = 2)
+```
+
+####TOP10 RBP families coxph volcano:
+```{r}
+TCGAcoxph_RBPfamily_summary_vp=TCGAcoxph_RBPfamily_summary
+
+TCGAcoxph_RBPfamily_summary_vp_sub = subset(TCGAcoxph_RBPfamily_summary_vp, TCGAcoxph_RBPfamily_summary_vp$family=="RBP1")
+
+TCGAcoxph_RBPfamily_summary_vp_plot = ggplot(TCGAcoxph_RBPfamily_summary_vp_sub) +
+  geom_point(
+      data = TCGAcoxph_RBPfamily_summary_vp_sub,
+      aes(x = log2(hr), y = -log10(pval)),
+      fill = "blue",
+      color = "black",
+      cex = 2,
+      pch = 21
+    ) +
+  geom_text_repel(
+      data = TCGAcoxph_RBPfamily_summary_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(TCGAcoxph_RBPfamily_summary_vp_sub)),
+      size = 5,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+      theme_bw(base_size = 14)
+      
+TCGAcoxph_RBPfamily_summary_vp_plot
 ```
 
 ```{r}
-#survival graph based on RBP6 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP6, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
+#Add normalized mean counts as size of the points:
+name_conversion = read.delim("~/Desktop/Livernome_input/200511_gencode.v27.annotation_conversion_table.txt", row.names = 1)
+TCGAcounts_LibrNorm_rowmean = rowMeans(TCGAcounts_LibrNorm)
+TCGAcounts_LibrNorm_geneid = merge(x=TCGAcounts_LibrNorm_rowmean, y=name_conversion, by.x=0, by.y=0, all.x=FALSE)
+
+TCGAcoxph_RBPfamily_summary_count = merge(x=TCGAcoxph_RBPfamily_summary, y=TCGAcounts_LibrNorm_geneid, by.x=0, by.y=4, all.x=TRUE)
+row.names(TCGAcoxph_RBPfamily_summary_count) = TCGAcoxph_RBPfamily_summary_count$Row.names
+
+TCGAcoxph_RBPfamily_summary_count = TCGAcoxph_RBPfamily_summary_count[,c(2:5,7)]
 ```
 
 ```{r}
-#forest plot of RBP6 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP6, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+#Scale the normalized counts from 0-1:
+library(scales)
+TCGAcoxph_RBPfamily_summary_count$relExp = rescale(TCGAcoxph_RBPfamily_summary_count$x, to = c(0, 1))
 ```
 
+####TOP10 RBP families coxph volcano:
 ```{r}
-#forest plot of RBP6 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP6 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+RBPfamily_vp=TCGAcoxph_RBPfamily_summary_count
+RBPfamily_vp_sub = subset(RBPfamily_vp, hr>1 & pval<0.05)
+size_RBPfamily = TCGAcoxph_RBPfamily_summary_count$relExp
+
+RBPfamily_vp_plot = ggplot(RBPfamily_vp,
+                          aes(x = log2(hr), y = -log10(pval))
+                          ) +
+  geom_point(
+      aes(size = size_RBPfamily),
+      alpha = 0.8,
+      fill = "darkgreen",
+      color = "black",
+      pch = 21
+    ) +
+  geom_text_repel(
+      data = RBPfamily_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(RBPfamily_vp_sub)),
+      size = 4,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+      theme_bw(base_size = 14) +
+  labs(size="rel.exp.", x = "log2(hazard ratio)") +
+  guides(size=guide_legend(override.aes=list(fill="white")))
+
+RBPfamily_vp_plot
 ```
 
+####RBP1 family coxph volcano:
 ```{r}
-#survival graph based on RBP7 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP7, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
-```
-```{r}
-#forest plot of RBP7 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP7, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
+RBPfamily_vp=TCGAcoxph_RBPfamily_summary_count
+RBPfamily_vp_sub = subset(RBPfamily_vp, RBPfamily_vp$family=="RBP1")
+RBPfamily_vp_sub$relExp = rescale(RBPfamily_vp_sub$x, to = c(0, 1))
+size_RBPfamily = RBPfamily_vp_sub$relExp
+
+RBPfamily_vp_plot = ggplot(RBPfamily_vp_sub,
+                          aes(x = log2(hr), y = -log10(pval))
+                          ) +
+  geom_point(
+      aes(size = size_RBPfamily),
+      alpha = 0.8,
+      fill = "#20CBF8",
+      color = "black",
+      pch = 21
+    ) +
+  geom_text_repel(
+      data = RBPfamily_vp_sub,
+      aes(x = log2(hr), y = -log10(pval), label=rownames(RBPfamily_vp_sub)),
+      size = 4,
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+      ) +
+      theme_bw(base_size = 14) +
+      xlim(-1,1.6) +
+      ylim(0,5) +
+      #scale_x_continuous(breaks = seq(-1, 1.5, by = 0.5)) +
+  labs(size="rel.exp.", x = "log2(hazard ratio)") +
+  guides(size=guide_legend(override.aes=list(fill="white")))
+
+RBPfamily_vp_plot
 ```
 
-```{r}
-#forest plot of RBP7 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP7 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
 
+####survival graphs RBP1 family
 ```{r}
-#survival graph based on RBP8 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP8, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
-```
+setwd("~/Desktop/200630_TOP10_RBP_families/")
+CCT_family = rownames(subset(RBPfamily_vp, RBPfamily_vp$family=="RBP1"))
+genes<-CCT_family
+time<-TCGAsurv$time
+event<-TCGAsurv$censored
 
-```{r}
-#forest plot of RBP8 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP8, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
+for (i in 1:length(genes)){
+  TCGAsurv[[genes[i]]] <- factor(TCGAsurv[[genes[i]]], levels = c("1","3"))
+  pdf(paste("200630_",genes[i], "_surv.pdf", sep = ""), width = 3, height = 3)
+  fitTCGA1 <- survfit(as.formula(paste0("Surv(time , event)~",genes[i])), data = TCGAsurv)
+  gg=ggsurvplot(fitTCGA1, 
+           data = TCGAsurv,
+           log.rank.weights = "1",
+           pval = TRUE,
+           pval.coord = c(10,4),
+           pval.method = FALSE,
+           pval.method.coord = c(10,10),
+           censor.size = 3,
+           fun = "pct",
+           palette = c("#20CBF8","#000000"),
+           legend = "bottom", 
+           risk.table = FALSE, 
+           xscale=365, 
+           break.x.by=365,
+           xlim=c(0,3650),
+           xlab = "Time (years)")
+  print(gg, newpage = FALSE)
+  dev.off()
+}
 
-```{r}
-#forest plot of RBP8 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP8 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
-
-```{r}
-#survival graph based on RBP9 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP9, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
-```
-```{r}
-#forest plot of RBP9 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP9, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
-
-```{r}
-#forest plot of RBP9 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP9 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
-
-```{r}
-#survival graph based on RBP10 expression (tertiles)
-fitTCGA1 <- survfit(TCGA_surv_object ~ RBP10, data = TCGAsurv)
-ggsurvplot(fitTCGA1, data = TCGAsurv, pval = FALSE, legend = "bottom", risk.table = FALSE, xscale=365, break.x.by=365, xlab = "Time (years)")
-```
-
-```{r}
-#forest plot of RBP10 expression (tertiles)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP10, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
-```
-
-```{r}
-#forest plot of RBP10 and metadata (adjusting for tumor-stage, age, and gender)
-TCGA.fit.coxph <- coxph(TCGA_surv_object ~ RBP10 + tumor_stage_simple + age_at_diagnosis + gender, data = TCGAsurv)
-ggforest(TCGA.fit.coxph, data = TCGAsurv)
 ```
