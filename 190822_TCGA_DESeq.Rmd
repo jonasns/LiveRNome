@@ -51,9 +51,24 @@ colors <- rep(col.def, each=1)
 M_TCGA <- summary(TCGA.PCA)
 par(pty="s")
 plot(TCGA.PCA$x[,1],TCGA.PCA$x[,2],col=colors,pch=20, cex=2, xlab=paste0("PC1 (", round(M_TCGA$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(M_TCGA$importance[2,2]*100), "%)"))
-text(TCGA.PCA$x[,1],TCGA.PCA$x[,2],labels=cData_TCGA$Stage, cex=0.5)
 plot(TCGA.PCA$x[,3],TCGA.PCA$x[,4],col=colors,pch=20, cex=2, xlab=paste0("PC3 (", round(M_TCGA$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", round(M_TCGA$importance[2,4]*100), "%)"))
-text(TCGA.PCA$x[,3],TCGA.PCA$x[,4],labels=cData_TCGA$Stage, cex=0.5)
+```
+
+####Next we library normalize the normalized counts values
+```{r}
+TCGA.normalizedCounts_colSum=colSums(TCGA.normalizedCounts)
+TCGA.normalizedCounts_LibrNorm = sweep(TCGA.normalizedCounts, 2, TCGA.normalizedCounts_colSum, `/`)*(mean(colSums(TCGA.normalizedCounts)))
+```
+
+####PCA on library size normalized counts
+```{r}
+TCGA.PCA<- prcomp(t(log2(TCGA.normalizedCounts_LibrNorm+1)))
+col.def<-c("blue","red")
+colors <- rep(col.def, each=1)
+M_TCGA<-summary(TCGA.PCA)
+par(pty="s")
+plot(TCGA.PCA$x[,1],TCGA.PCA$x[,2],col=colors,pch=20, cex=2,xlab=paste0("PC1 (", round(M_TCGA$importance[2,1]*100), "%)"),ylab=paste0("PC2 (", round(M_TCGA$importance[2,2]*100),"%)"))
+plot(TCGA.PCA$x[,3],TCGA.PCA$x[,4],col=colors,pch=20, cex=2,xlab=paste0("PC3 (", round(M_TCGA$importance[2,3]*100), "%)"),ylab=paste0("PC4 (", round(M_TCGA$importance[2,4]*100),"%)"))
 ```
 
 ####Write the DE analysis results and normalized counts to a table:
@@ -63,35 +78,81 @@ write.table(res.TCGA_wco, "~/Desktop/170418_deseq_TCGA_wco_LFC0", sep="\t")
 write.table(TCGA.normalizedCounts, "~/Desktop/170418_libr_size_norm_counts_TCGA", sep="\t")
 ```
 
-####Volcano plot of DE analysis results
+####load list of genes to highlight
 ```{r}
-par(pty="s")
-with(res.TCGA_wco, plot(log2FoldChange, -log10(padj), pch=20))
-with(subset(res.TCGA_wco, abs(log2FoldChange)>log2(2) & padj<0.05), points(log2FoldChange, -log10(padj), pch=20, col="red"))
+highlight = read.delim("~/Desktop/200427_gene_highlight_list.txt", row.names = 1, header=TRUE)
 ```
 
-####Volcano plot of DE analysis results with RBPs highlighted
+####Volcano plot
 ```{r}
-RBPs <- read.delim("~/Desktop/190823_170214_hRBP_final_list.txt")
-par(pty="s")
-with(res.TCGA_wco, plot(log2FoldChange, -log10(padj), pch=20))
-with(subset(res.TCGA_wco, abs(log2FoldChange)>log2(2) & padj<0.05 & row.names(res.TCGA_wco)%in%RBPs[,1]), points(log2FoldChange, -log10(padj), pch=20, col="red", cex=1))
-with(subset(res.TCGA_wco, abs(log2FoldChange)<log2(2) & padj>0.05 & row.names(res.TCGA_wco)%in%RBPs[,1]), points(log2FoldChange, -log10(padj), pch=20, col="blue", cex=1))
+# set values outside axis limits to Inf
+upper_padj_limit = 80
+
+TCGAresults_limits = TCGAresults
+TCGAresults_limits$log_padj = -log10(TCGAresults_limits$padj)
+TCGAresults_limits$log_padj[TCGAresults_limits$log_padj > upper_padj_limit] = Inf
 ```
 
-####Hierarchical clustering of normalized counts
 ```{r}
-TCGA.normalizedCounts_new_head=TCGA.normalizedCounts
-colnames(TCGA.normalizedCounts_new_head)=paste0(cData_TCGA$Stage, cData_TCGA$ID)
-sampleTree_TCGA_new_head <- hclust(dist(t(TCGA.normalizedCounts_new_head)), method = "average")
-colLab <- function(n) { 
-if (is.leaf(n)) {
-a <- attributes(n)
-labCol <- ifelse(grepl("Primary_Tumor",a$label),"blue","red")
-attr(n, "nodePar") <- c(a$nodePar, lab.col = labCol)
-}
-n
-}
-par(mar=c(15,3,2,2))
-plot(dendrapply(as.dendrogram(sampleTree_TCGA_new_head),colLab))
+library(ggplot2)
+library(ggfortify)
+library(ggrepel)
+TCGAresults <- read.delim("~/Desktop/Livernome_input/170418_deseq_TCGA_wco_LFC0", sep="\t")
+RBPs <- read.delim("~/Desktop/Livernome_input/190823_170214_hRBP_final_list.txt")
+vp=TCGAresults_limits
+
+setwd("~/Desktop")
+pdf("200701_TCGA_volcano.pdf", height=3, width=3)
+par(pty="s")
+par(mar=c(2,2,2,2))
+
+signif_sub = subset(vp, abs(log2FoldChange)>log2(2) & padj<0.05)
+RBP_sub = subset(vp, abs(log2FoldChange)>log2(2) & padj<0.05 & row.names(vp)%in%RBPs[,1])
+RBP_sub_ns = subset(vp, padj>0.05 & row.names(vp)%in%RBPs[,1])
+
+vp_plot= ggplot(vp) +
+  geom_point(
+      data = vp,
+      aes(x = log2FoldChange, y = log_padj),
+      color = "grey",
+      cex = 1
+    ) +
+    geom_point(
+      data = signif_sub,
+      aes(x = log2FoldChange, y = log_padj),
+      color = "red",
+      cex = 1
+    ) +
+    geom_point(
+      data = RBP_sub_ns,
+      aes(x = log2FoldChange, y = log_padj),
+      color = "chartreuse4",
+      cex = 1
+    ) +
+    geom_point(
+      data = RBP_sub,
+      aes(x = log2FoldChange, y = log_padj),
+      fill = "darkgreen",
+      color = "black",
+      cex = 1.5,
+      pch = 21
+    ) +
+  geom_text_repel(
+      data = vp_sub,
+      aes(x = log2FoldChange, y = log_padj, label=gene_name),
+      size = 5,
+      min.segment.length = 0, #use to always put a line
+      box.padding = unit(0.35, "lines"),
+      point.padding = unit(0.3, "lines")
+    ) +
+    theme_bw(base_size = 14) +
+    ggtitle("TCGA HCC cohort") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_x_continuous(limits = c(-7.5, 7.5)) +
+    scale_y_continuous(limits = c(0, 80))
+
+
+vp_plot
+print(vp_plot, newpage = FALSE)
+dev.off()
 ```
