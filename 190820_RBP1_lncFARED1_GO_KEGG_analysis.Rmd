@@ -1,5 +1,5 @@
 ---
-title: "190828 RBP1-lncFARED1 GO analysis"
+title: "200701 RBP-lncRNA GO and KEGG analysis"
 output: html_notebook
 ---
 
@@ -12,8 +12,57 @@ output: html_notebook
 #biocLite("DOSE")
 ```
 
-####Load packages:
+####Install specific package versions (used for initial analysis):
 ```{r}
+#used IRanges_2.12.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/src/contrib/IRanges_2.12.0.tar.gz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#used S4Vectors_0.16.0.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/src/contrib/S4Vectors_0.16.0.tar.gz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#used BiocGenerics_0.24.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/bin/macosx/el-capitan/contrib/3.4/BiocGenerics_0.24.0.tgz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#Install old version of org.Hs.eg.db (used 3.5.0 on 190828).
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/data/annotation/src/contrib/org.Hs.eg.db_3.5.0.tar.gz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#used clusterProfiler_3.6.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/bin/macosx/el-capitan/contrib/3.4/clusterProfiler_3.6.0.tgz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#used DOSE_3.4.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/bin/macosx/el-capitan/contrib/3.4/DOSE_3.4.0.tgz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#used AnnotationDbi_1.40.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/bin/macosx/el-capitan/contrib/3.4/AnnotationDbi_1.40.0.tgz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r}
+#used Biobase_2.38.0 on 190828
+packageurl <- "http://bioconductor.riken.jp/packages/3.6/bioc/src/contrib/Biobase_2.38.0.tar.gz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+####Load packages:
+```{r, message=FALSE}
 library(clusterProfiler)
 library(org.Hs.eg.db)
 library(DOSE)
@@ -22,13 +71,39 @@ library(DOSE)
 ```{r}
 sessionInfo()
 ```
+R version 3.4.3 (2017-11-30)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS High Sierra 10.13.6
+
+Matrix products: default
+BLAS: /System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libBLAS.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.4/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] parallel  stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] org.Hs.eg.db_3.5.0    AnnotationDbi_1.40.0  IRanges_2.12.0        S4Vectors_0.16.0      Biobase_2.38.0        BiocGenerics_0.24.0   clusterProfiler_3.6.0 DOSE_3.4.0           
+
+loaded via a namespace (and not attached):
+ [1] qvalue_2.10.0       tidyselect_1.0.0    fgsea_1.4.1         xfun_0.12           purrr_0.3.3         reshape2_1.4.3      splines_3.4.3       colorspace_1.4-1    vctrs_0.2.2         yaml_2.2.1         
+[11] blob_1.2.1          rlang_0.4.4         pillar_1.4.3        glue_1.3.1          DBI_1.1.0           BiocParallel_1.12.0 bit64_0.9-7         rvcheck_0.1.7       lifecycle_0.1.0     plyr_1.8.5         
+[21] stringr_1.4.0       munsell_0.5.0       GOSemSim_2.4.1      gtable_0.3.0        memoise_1.1.0       knitr_1.28          Rcpp_1.0.3          BiocManager_1.30.10 scales_1.1.0        DO.db_2.9          
+[31] bit_1.1-15.2        gridExtra_2.3       fastmatch_1.1-0     ggplot2_3.2.1       digest_0.6.23       stringi_1.4.5       dplyr_0.8.4         grid_3.4.3          tools_3.4.3         magrittr_1.5       
+[41] lazyeval_0.2.2      tibble_2.1.3        RSQLite_2.2.0       tidyr_1.0.2         crayon_1.3.4        GO.db_3.5.0         pkgconfig_2.0.3     data.table_1.12.0   assertthat_0.2.1    rstudioapi_0.11    
+[51] R6_2.4.1            igraph_1.2.4        compiler_3.4.3 
 
 ####Load the data:
 ```{r}
 #Note: It's better to use ENSEMBL or ENTREZ IDs for the GO analysis. The clusterProfiler package only accepts ENTREZ IDs for KEGG pathway analysis.
-RBP1 =  read.delim("~/Desktop/190416_RBP1_FDR005_ALL_up_down_ensembl.txt", header=F)
-lncFARED1 =  read.delim("~/Desktop/190416_lncFARED1_FDR005_ALL_up_down_ensembl.txt", header=F)
-RBP1_lncFARED1_OVERLAP = read.delim("~/Desktop/190417_RBP1_lncFARED1_FDR005_ALL_up_down_OVERLAP.txt", header=F)
+
+setwd("~/Desktop/")
+RBP1 =  read.delim("190416_RBP1_FDR005_ALL_up_down_ensembl.txt", header=F)
+lncFARED1 =  read.delim("200601_190426_lncFARED1_FDR001_ALL_up_down_ensembl.txt", header=F)
+RBP1_lncFARED1_OVERLAP = read.delim("200601_RBP1_lncFARED1_FDR005_FDR001_ALL_up_down_OVERLAP.txt", header=F)
 ```
 
 #### Biological Process GO analysis
@@ -67,6 +142,7 @@ RBP1_lncFARED1_OVERLAP_BP <- enrichGO(gene = RBP1_lncFARED1_OVERLAP$V1,
 head(summary(RBP1_lncFARED1_OVERLAP_BP))
 ```
 
+
 ```{r}
 #Plot top 15 BPs as dotplots
 dotplot(RBP1_BP, showCategory=15)
@@ -75,18 +151,19 @@ dotplot(RBP1_lncFARED1_OVERLAP_BP, showCategory=15)
 ```
 
 ```{r}
-#Plot top 10 BPs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
-cnetplot(RBP1_BP, 10)
-cnetplot(lncFARED1_BP, 10)
-cnetplot(RBP1_lncFARED1_OVERLAP_BP, 10)
+#Plot top 5 BPs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_BP, 5)
+cnetplot(lncFARED1_BP, 5)
+cnetplot(RBP1_lncFARED1_OVERLAP_BP, 5)
 ```
 
 ```{r}
 #write the analysis results to file:
-write.table(as.matrix(summary(RBP1_BP)),file="~/Desktop/190828_Summary_RBP1_BP.txt",sep="\t")
-write.table(as.matrix(summary(lncFARED1_BP)),file="~/Desktop/190828_Summary_lncFARED1_BP.txt",sep="\t")
-write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_BP)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_BP.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_BP)),file="~/Desktop/200601_Summary_RBP1_BP.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_BP)),file="~/Desktop/200601_Summary_lncFARED1_BP.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_BP)),file="~/Desktop/200601_Summary_RBP1_lncFARED1_OVERLAP_BP.txt",sep="\t")
 ```
+
 #### Molecular Functions GO analysis
 ```{r}
 RBP1_MF <- enrichGO(gene = RBP1$V1,
@@ -111,19 +188,19 @@ lncFARED1_MF <- enrichGO(gene = lncFARED1$V1,
                 readable      = TRUE)
 head(summary(lncFARED1_MF))
 
-#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
 RBP1_lncFARED1_OVERLAP_MF <- enrichGO(gene = RBP1_lncFARED1_OVERLAP$V1,
                 keyType       = 'ENSEMBL',
                 OrgDb         = org.Hs.eg.db,
                 ont           = "MF",
                 pAdjustMethod = "BH",
-                pvalueCutoff  = 0.25,
-                qvalueCutoff  = 0.25,
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
                 minGSSize     = 5,
                 readable      = TRUE)
 head(summary(RBP1_lncFARED1_OVERLAP_MF))
-
 ```
+
+
 ```{r}
 #Plot top 15 MFs as dotplots
 dotplot(RBP1_MF, showCategory=15)
@@ -132,17 +209,17 @@ dotplot(RBP1_lncFARED1_OVERLAP_MF, showCategory=15)
 ```
 
 ```{r}
-#Plot top 10 MFs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
-cnetplot(RBP1_MF, 10)
-cnetplot(lncFARED1_MF, 10)
-cnetplot(RBP1_lncFARED1_OVERLAP_MF, 10)
+#Plot top 5 MFs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_MF, 5)
+cnetplot(lncFARED1_MF, 5)
+cnetplot(RBP1_lncFARED1_OVERLAP_MF, 5)
 ```
 
 ```{r}
 #write the analysis results to file:
-write.table(as.matrix(summary(RBP1_MF)),file="~/Desktop/190828_Summary_RBP1_MF.txt",sep="\t")
-write.table(as.matrix(summary(lncFARED1_MF)),file="~/Desktop/190828_Summary_lncFARED1_MF.txt",sep="\t")
-write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_MF)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_MF.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_MF)),file="~/Desktop/200601_Summary_RBP1_MF.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_MF)),file="~/Desktop/200601_Summary_lncFARED1_MF.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_MF)),file="~/Desktop/200601_Summary_RBP1_lncFARED1_OVERLAP_MF.txt",sep="\t")
 ```
 
 #### Cellular component GO analysis
@@ -169,18 +246,16 @@ lncFARED1_CC <- enrichGO(gene = lncFARED1$V1,
                 readable      = TRUE)
 head(summary(lncFARED1_CC))
 
-#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
 RBP1_lncFARED1_OVERLAP_CC <- enrichGO(gene = RBP1_lncFARED1_OVERLAP$V1,
                 keyType       = 'ENSEMBL',
                 OrgDb         = org.Hs.eg.db,
                 ont           = "CC",
                 pAdjustMethod = "BH",
-                pvalueCutoff  = 0.25,
-                qvalueCutoff  = 0.25,
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05,
                 minGSSize     = 5,
                 readable      = TRUE)
 head(summary(RBP1_lncFARED1_OVERLAP_CC))
-
 ```
 
 ```{r}
@@ -191,17 +266,17 @@ dotplot(RBP1_lncFARED1_OVERLAP_CC, showCategory=15)
 ```
 
 ```{r}
-#Plot top 10 CCs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
-cnetplot(RBP1_CC, 10)
-cnetplot(lncFARED1_CC, 10)
-cnetplot(RBP1_lncFARED1_OVERLAP_CC, 10)
+#Plot top 5 CCs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_CC, 5)
+cnetplot(lncFARED1_CC, 5)
+cnetplot(RBP1_lncFARED1_OVERLAP_CC, 5)
 ```
 
 ```{r}
 #write the analysis results to file:
-write.table(as.matrix(summary(RBP1_CC)),file="~/Desktop/190828_Summary_RBP1_CC.txt",sep="\t")
-write.table(as.matrix(summary(lncFARED1_CC)),file="~/Desktop/190828_Summary_lncFARED1_CC.txt",sep="\t")
-write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_CC)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_CC.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_CC)),file="~/Desktop/200601_Summary_RBP1_CC.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_CC)),file="~/Desktop/200601_Summary_lncFARED1_CC.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_CC)),file="~/Desktop/200601_Summary_RBP1_lncFARED1_OVERLAP_CC.txt",sep="\t")
 ```
 
 #### KEGG analysis
@@ -222,22 +297,25 @@ RBP1.lncFARED1.OVERLAP.entrez <- bitr(RBP1_lncFARED1_OVERLAP$V1, fromType = "ENS
 
 ```{r}
 #Then perform the KEGG analysis
-
-#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
 RBP1_kegg <- enrichKEGG(gene = RBP1.entrez$ENTREZID,
                  organism     = 'hsa',
-                 pvalueCutoff = 0.50)
+                 pvalueCutoff = 0.05,
+                 qvalueCutoff  = 0.05,
+                 minGSSize = 3)
 head(RBP1_kegg)
 
 lncFARED1_kegg <- enrichKEGG(gene = lncFARED1.entrez$ENTREZID,
                  organism     = 'hsa',
-                 pvalueCutoff = 0.05)
+                 pvalueCutoff = 0.05,
+                 qvalueCutoff  = 0.05,
+                 minGSSize = 3)
 head(lncFARED1_kegg)
 
-#significance cutoff has been loosened due to nothing significant at p/q = 0.05:
 RBP1_lncFARED1_OVERLAP_kegg <- enrichKEGG(gene = RBP1.lncFARED1.OVERLAP.entrez$ENTREZID,
                  organism     = 'hsa',
-                 pvalueCutoff = 0.25)
+                 pvalueCutoff = 0.05,
+                 qvalueCutoff  = 0.05,
+                 minGSSize = 3)
 head(RBP1_lncFARED1_OVERLAP_kegg)
 ```
 
@@ -250,15 +328,15 @@ dotplot(RBP1_lncFARED1_OVERLAP_kegg, showCategory=15)
 ```
 
 ```{r}
-#Plot top 10 KEGGs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
-#cnetplot(RBP1_kegg, 10)
-cnetplot(lncFARED1_kegg, 10)
-cnetplot(RBP1_lncFARED1_OVERLAP_kegg, 10)
+#Plot top 5 KEGGs as a cnetplot (GO terms are in brown bubbles, and gene names are in grey bubbles)
+cnetplot(RBP1_kegg, 5)
+cnetplot(lncFARED1_kegg, 5)
+cnetplot(RBP1_lncFARED1_OVERLAP_kegg, 5)
 ```
 
 ```{r}
 #write the analysis results to file:
-write.table(as.matrix(summary(RBP1_kegg)),file="~/Desktop/190828_Summary_RBP1_KEGG.txt",sep="\t")
-write.table(as.matrix(summary(lncFARED1_kegg)),file="~/Desktop/190828_Summary_lncFARED1_KEGG.txt",sep="\t")
-write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_kegg)),file="~/Desktop/190828_Summary_RBP1_lncFARED1_OVERLAP_KEGG.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_kegg)),file="~/Desktop/200601_Summary_RBP1_KEGG.txt",sep="\t")
+write.table(as.matrix(summary(lncFARED1_kegg)),file="~/Desktop/200601_Summary_lncFARED1_KEGG.txt",sep="\t")
+write.table(as.matrix(summary(RBP1_lncFARED1_OVERLAP_kegg)),file="~/Desktop/200601_Summary_RBP1_lncFARED1_OVERLAP_KEGG.txt",sep="\t")
 ```
