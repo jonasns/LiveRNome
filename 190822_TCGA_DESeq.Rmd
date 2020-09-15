@@ -14,12 +14,6 @@ library(BiocParallel)
 register(MulticoreParam(4))
 ```
 
-
-####Session Info:
-```{r}
-sessionInfo()
-```
-
 ####Load data:
 ```{r}
 TCGA <- read.delim("/Desktop/170418_TCGA_htseqcount_Chr1_22")
@@ -155,4 +149,10 @@ vp_plot= ggplot(vp) +
 vp_plot
 print(vp_plot, newpage = FALSE)
 dev.off()
+```
+
+####Session Info:
+```{r}
+sessionInfo()
+#DEseq2 version used for final DEG result list: 1.14.1 (in bioconductor v. 3.4). 
 ```
